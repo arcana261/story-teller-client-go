@@ -1,1379 +1,82 @@
 openapi: 3.1.0
 info:
   title: Story Engine API
-  version: 0.1.12
+  version: 0.1.13
 servers:
 - url: /
-security:
-- PlayerApiKey: []
-  PlayerId: []
 paths:
-  /v1/health:
-    get:
-      description: Return aggregate health status for Postgres and Redis.
-      operationId: health_v1_health_get
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-          description: Successful Response
-      summary: Health
-      tags:
-      - player
-  /v1/stories:
-    get:
-      description: Return a cursor-paginated list of stories available to the authenticated
-        tenant.
-      operationId: list_stories_v1_stories_get
-      parameters:
-      - explode: true
-        in: query
-        name: cursor
-        required: false
-        schema:
-          nullable: true
-          type: string
-        style: form
-      - explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          default: 20
-          title: Limit
-          type: integer
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedResponse_StorySummaryResponse_"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: List Stories
-      tags:
-      - player
-  /v1/story/{story_id}/node/{node_id}:
-    get:
-      description: "Fetch a story node by ID, with optional drama scoring when a session\
-        \ exists."
-      operationId: get_node_v1_story__story_id__node__node_id__get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NodeResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Node
-      tags:
-      - player
-  /v1/story/{story_id}/node/{node_id}/arc:
-    get:
-      description: "Return arc analysis for a node, computing its depth server-side\
-        \ via BFS."
-      operationId: get_node_arc_v1_story__story_id__node__node_id__arc_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ArcAnalysis"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Node Arc
-      tags:
-      - player
-  /v1/story/{story_id}/session:
-    get:
-      description: "Return the existing session for this player/story pair, creating\
-        \ one lazily if absent."
-      operationId: get_or_create_session_v1_story__story_id__session_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Or Create Session
-      tags:
-      - player
-  /v1/story/{story_id}/session/entity-index:
-    get:
-      description: Return the current playthrough's entity provenance index.
-      operationId: get_entity_index_v1_story__story_id__session_entity_index_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EntityIndexResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Entity Index
-      tags:
-      - player
-  /v1/story/{story_id}/choice:
-    post:
-      description: |-
-        Submit a player choice and advance the session.
-
-        For **lazy choices** (``choice.target_node_id`` is null/empty) with
-        ``Accept: text/event-stream``, generation runs in a background task and the
-        response is a live SSE stream.  See the ``responses`` schema above for the
-        full event sequence (``thinking`` → ``token``\* → ``done`` | ``error``).
-
-        For all other cases the response is a standard JSON ``NodeResponse``.
-      operationId: submit_choice_v1_story__story_id__choice_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChoiceRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NodeResponse"
-            text/event-stream:
-              example: |+
-                event: thinking
-                data: {}
-
-                event: token
-                data: {"word": "Once"}
-
-                event: token
-                data: {"word": "upon"}
-
-                event: done
-                data: {"node_id": "...", "text": "Once upon ..."}
-
-              schema:
-                nullable: true
-                type: string
-          description: |-
-            Node response. Content type depends on Accept header and choice type.
-
-            **application/json** — returned when the choice has a pre-authored `target_node_id`, or when the client does not send `Accept: text/event-stream`. Body is a `NodeResponse` object.
-
-            **text/event-stream** — returned when the choice is lazy (no `target_node_id`) and the client sends `Accept: text/event-stream`. The stream emits the following SSE events in order:
-
-            | Event | Data | Description |
-            |-------|------|-------------|
-            | `thinking` | `{}` | Emitted immediately; signals the pipeline has started. Use to show a loading state. |
-            | `token` | `{"word": "<str>"}` | One word of generated text. Emitted for each word as the LLM streams. |
-            | `done` | `NodeResponse` (full object) | Final node after session has been advanced. Always the last event on success. |
-            | `error` | `{"error_code": "<str>", "message": "<str>"}` | Emitted when the pipeline fails. Always the last event on failure. |
-
-            The stream always ends with either `done` or `error`, never both. A `done` event contains the complete `NodeResponse`; token events may be discarded if only the final node is needed.
-        "409":
-          description: IDEMPOTENCY_CONFLICT — duplicate request is being processed.
-        "429":
-          description: SESSION_BUSY — another LLM request is active for this session.
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Submit Choice
-      tags:
-      - player
-  /v1/story/{story_id}/explore:
-    post:
-      description: |-
-        Answer a non-advancing scene exploration question.
-
-        Returns a JSON ``ExplorationResponse`` by default.  When the client sends
-        ``Accept: text/event-stream`` the response is a live SSE stream
-        (``thinking`` → ``token``\* → ``done`` | ``error``).
-
-        The important ordering is: exact replay, cheap validation/caps, quota
-        charge, then the Stage 5 pipeline. That keeps stored replays reachable
-        even when a player is over quota, while brand-new model work is charged
-        before it can reach the LLM.
-      operationId: explore_node_v1_story__story_id__explore_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ExplorationRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema: {}
-          description: |-
-            Non-advancing exploration answer.
-
-            **JSON** (default, or ``Accept: application/json``): Returns an ``ExplorationResponse`` object.
-
-            **SSE** (``Accept: text/event-stream``): Returns a live token stream.
-
-            | Event | Data | Description |
-            |-------|------|-------------|
-            | `thinking` | `{}` | Pipeline started. |
-            | `token` | `{"word": "<str>"}` | One word of generated text. |
-            | `done` | `ExplorationResponse` | Final answer. Always the last event on success. |
-            | `error` | `{"error_code": "<str>", "message": "<str>"}` | Pipeline failure. Always the last event on failure. |
-
-            The stream always ends with either ``done`` or ``error``, never both.
-        "409":
-          description: "STALE_SESSION, SESSION_LOCKED, or IDEMPOTENCY_CONFLICT."
-        "413":
-          description: EXPLORATION_OVERLAY_TOO_LARGE.
-        "429":
-          description: "Exploration rate, node-question, cache-miss, or session-busy\
-            \ limit."
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Explore Node
-      tags:
-      - player
-  /v1/story/{story_id}/exploration-state:
-    get:
-      description: Return current-node exploration state without raw turn transcript
-        text.
-      operationId: get_exploration_state_v1_story__story_id__exploration_state_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: true
-        in: query
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ExplorationStateResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Exploration State
-      tags:
-      - player
-  /v1/story/{story_id}/exploration-nodes:
-    get:
-      description: |-
-        List all exploration nodes anchored at a given story node for the current session.
-
-        Returns ``picked=True`` for any node this session/playthrough has already opted into.
-        The ``answer`` field is included so players can read the full narrative text before
-        deciding whether to pick a shared discovery from another player's run.
-      operationId: list_player_exploration_nodes_v1_story__story_id__exploration_nodes_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: true
-        in: query
-        name: parent_node_id
-        required: true
-        schema:
-          title: Parent Node Id
-          type: string
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/ExplorationNodeResponse"
-                title: Response List Player Exploration Nodes V1 Story  Story Id  Exploration
-                  Nodes Get
-                type: array
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: List Player Exploration Nodes
-      tags:
-      - player
-  /v1/story/{story_id}/exploration-nodes/{node_id}/pick:
-    delete:
-      description: |-
-        Remove the current session's pick for an exploration node.
-
-        This operation is intentionally idempotent: if the pick does not exist
-        (either it was never created or was already deleted), the response is still
-        200 with ``picked=False``.  No 404 is returned because the desired end state
-        (node is not picked) is already satisfied.  This matches the standard REST
-        pattern for idempotent DELETE operations.
-      operationId: unpick_exploration_node_v1_story__story_id__exploration_nodes__node_id__pick_delete
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ExplorationPickResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Unpick Exploration Node
-      tags:
-      - player
-    post:
-      description: |-
-        Opt the current session into a pre-existing exploration node.
-
-        The player is explicitly picking a shared discovery from another player's
-        run — this is *not* an auto-generated pick from the player's own turn.
-        Therefore ``auto_picked=False`` is passed to the repository so the pick is
-        distinguishable from auto-picks created by Phase 3 of the exploration pipeline.
-
-        A session-node guard prevents picks on nodes belonging to story positions the
-        player has not yet reached (or has already left).  This avoids contaminating
-        the narrative context with discoveries that were not relevant at the current node.
-      operationId: pick_exploration_node_v1_story__story_id__exploration_nodes__node_id__pick_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ExplorationPickResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Pick Exploration Node
-      tags:
-      - player
-  /v1/story/{story_id}/free-text:
-    post:
-      description: |-
-        Submit a free-text player input and advance the session.
-
-        Always returns a live SSE stream (``text/event-stream``).  See the
-        ``responses`` schema above for the full event sequence
-        (``thinking`` → ``token``\* → ``done`` | ``error``).
-      operationId: submit_free_text_v1_story__story_id__free_text_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/FreeTextRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema: {}
-            text/event-stream:
-              example: |+
-                event: thinking
-                data: {}
-
-                event: token
-                data: {"word": "Once"}
-
-                event: done
-                data: {"node_id": "...", "text": "Once upon ..."}
-
-              schema:
-                nullable: true
-                type: string
-          description: |-
-            Node response as an SSE stream. Always returns ``text/event-stream``.
-
-            | Event | Data | Description |
-            |-------|------|-------------|
-            | `thinking` | `{}` | Emitted immediately; signals the pipeline has started. |
-            | `token` | `{"word": "<str>"}` | One word of generated text. |
-            | `done` | `NodeResponse` (full object) | Final node. Always the last event on success. |
-            | `error` | `{"error_code": "<str>", "message": "<str>"}` | Pipeline failure. Always the last event on failure. |
-
-            The stream always ends with either ``done`` or ``error``, never both.
-        "409":
-          description: IDEMPOTENCY_CONFLICT — duplicate request is being processed.
-        "429":
-          description: SESSION_BUSY — another LLM request is active for this session.
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Submit Free Text
-      tags:
-      - player
-  /v1/story/{story_id}/session/reset:
-    post:
-      description: |-
-        Reset a completed session back to the start node.
-
-        By default only completed sessions can be reset; pass ``?force=true`` to
-        reset an active session (useful for testing and tooling).  The distributed
-        lock is also cleared so any stale in-flight request cannot advance the
-        newly-reset session.
-      operationId: reset_session_v1_story__story_id__session_reset_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: true
-        in: query
-        name: force
-        required: false
-        schema:
-          default: false
-          title: Force
-          type: boolean
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Reset Session
-      tags:
-      - player
-  /v1/terms:
-    get:
-      description: "Return the current (latest effective) Terms of Service version,\
-        \ or null if none published."
-      operationId: get_current_tos_v1_terms_get
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                allOf:
-                - $ref: "#/components/schemas/ToSVersionResponse"
-                nullable: true
-          description: Successful Response
-      summary: Get Current Tos
-      tags:
-      - player
-  /v1/terms/accept:
-    post:
-      description: Record that the authenticated player has accepted the specified
-        ToS version.
-      operationId: accept_tos_v1_terms_accept_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AcceptToSRequest"
-        required: true
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Accept Tos
-      tags:
-      - player
-  /v1/player/{player_id}/tos-status:
-    get:
-      description: Return whether the requesting player has accepted the current ToS
-        version.
-      operationId: get_tos_status_v1_player__player_id__tos_status_get
-      parameters:
-      - explode: false
-        in: path
-        name: player_id
-        required: true
-        schema:
-          title: Player Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ToSStatusResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Tos Status
-      tags:
-      - player
-  /v1/player/{player_id}/data-export:
-    get:
-      description: |-
-        Return player-owned session and exploration data for portability.
-
-        The no-ToS auth dependency is intentional: portability and erasure rights
-        should not be blocked by a player declining or not yet accepting a newer
-        Terms of Service version. The route still verifies that the authenticated
-        ``X-Player-Id`` exactly matches the path parameter.
-      operationId: export_player_data_v1_player__player_id__data_export_get
-      parameters:
-      - explode: false
-        in: path
-        name: player_id
-        required: true
-        schema:
-          title: Player Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PlayerDataExportResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Export Player Data
-      tags:
-      - player
-  /v1/player/{player_id}:
-    delete:
-      description: |-
-        Delete player-owned session and exploration data for erasure.
-
-        Exploration has no current legal-hold exception in this codebase, so the
-        repository hard-deletes the raw transcript rows and overlays. The count
-        response is deliberately narrow operational metadata, not a copy of any
-        deleted content.
-      operationId: erase_player_data_v1_player__player_id__delete
-      parameters:
-      - explode: false
-        in: path
-        name: player_id
-        required: true
-        schema:
-          title: Player Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PlayerErasureResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Erase Player Data
-      tags:
-      - player
-  /v1/story/{story_id}/session/lock:
-    delete:
-      description: Release the session lock identified by the ``X-Session-Lock-Token``
-        header.
-      operationId: release_session_lock_v1_story__story_id__session_lock_delete
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: header
-        name: X-Session-Lock-Token
-        required: true
-        schema:
-          title: X-Session-Lock-Token
-          type: string
-        style: simple
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Release Session Lock
-      tags:
-      - player
-  /v1/player/{player_id}/story/{story_id}/warnings/acknowledge:
-    post:
-      description: Record that the player has acknowledged content warnings for an
-        adult-rated story.
-      operationId: acknowledge_warnings_v1_player__player_id__story__story_id__warnings_acknowledge_post
-      parameters:
-      - explode: false
-        in: path
-        name: player_id
-        required: true
-        schema:
-          title: Player Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Acknowledge Warnings
-      tags:
-      - player
-  /v1/story/{story_id}/graph:
-    get:
-      description: Return the full DAG structure of a story in development only.
-      operationId: get_graph_topology_v1_story__story_id__graph_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GraphTopologyResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Graph Topology
-      tags:
-      - player
-  /v1/story/{story_id}/paths:
-    get:
-      description: Enumerate all start-to-end paths through the story DAG in development
-        only.
-      operationId: get_story_paths_v1_story__story_id__paths_get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PathsResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Story Paths
-      tags:
-      - player
-  /v1/admin/tenant/register:
-    post:
-      operationId: register_tenant_v1_admin_tenant_register_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TenantRegistrationRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TenantRegistrationResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Register Tenant
-      tags:
-      - admin
-  /v1/admin/tenant/{tenant_id}:
-    delete:
-      operationId: offboard_tenant_v1_admin_tenant__tenant_id__delete
-      parameters:
-      - explode: false
-        in: path
-        name: tenant_id
-        required: true
-        schema:
-          title: Tenant Id
-          type: string
-        style: simple
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Offboard Tenant
-      tags:
-      - admin
-    get:
-      operationId: get_tenant_v1_admin_tenant__tenant_id__get
-      parameters:
-      - explode: false
-        in: path
-        name: tenant_id
-        required: true
-        schema:
-          title: Tenant Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TenantResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Get Tenant
-      tags:
-      - admin
-  /v1/admin/tenant/{tenant_id}/anthropic-key:
-    patch:
-      operationId: rotate_anthropic_key_v1_admin_tenant__tenant_id__anthropic_key_patch
-      parameters:
-      - explode: false
-        in: path
-        name: tenant_id
-        required: true
-        schema:
-          title: Tenant Id
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RotateAnthropicKeyRequest"
-        required: true
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Rotate Anthropic Key
-      tags:
-      - admin
-  /v1/admin/terms:
-    get:
-      operationId: list_tos_versions_v1_admin_terms_get
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/ToSVersionResponse"
-                title: Response List Tos Versions V1 Admin Terms Get
-                type: array
-          description: Successful Response
-      security:
-      - AdminBearer: []
-      summary: List Tos Versions
-      tags:
-      - admin
-    post:
-      operationId: create_tos_version_v1_admin_terms_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateToSVersionRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ToSVersionResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Create Tos Version
-      tags:
-      - admin
-  /v1/admin/tenants:
-    get:
-      operationId: list_tenants_v1_admin_tenants_get
-      parameters:
-      - explode: true
-        in: query
-        name: offset
-        required: false
-        schema:
-          default: 0
-          title: Offset
-          type: integer
-        style: form
-      - explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          default: 50
-          title: Limit
-          type: integer
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/TenantResponse"
-                title: Response List Tenants V1 Admin Tenants Get
-                type: array
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: List Tenants
-      tags:
-      - admin
-  /v1/admin/story/scaffold:
-    post:
-      operationId: scaffold_story_v1_admin_story_scaffold_post
-      responses:
-        "501":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-          description: Successful Response
-      security:
-      - AdminBearer: []
-      summary: Scaffold Story
-      tags:
-      - admin
-  /v1/admin/story/{story_id}:
-    delete:
-      description: |-
-        Soft-delete a story by setting deleted_at.
-
-        Child rows (nodes, events, sessions) are retained for audit and history.
-        The tenant_id must be supplied via the X-Tenant-Id request header.
-        Returns 404 if the story does not exist or is already deleted.
-      operationId: soft_delete_story_v1_admin_story__story_id__delete
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "204":
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Soft Delete Story
-      tags:
-      - admin
-    get:
-      description: "Retrieve a story with its characters, flag schema, and initial\
-        \ flags."
-      operationId: get_story_v1_admin_story__story_id__get
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StoryDetailResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Get Story
-      tags:
-      - admin
   /v1/admin/story/import:
     post:
-      description: Import a StoryGraph JSON payload into the database.
-      operationId: import_story_v1_admin_story_import_post
-      responses:
-        "201":
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-      security:
-      - AdminBearer: []
-      summary: Import Story
-      tags:
-      - admin
-  /v1/admin/story/{story_id}/node/{node_id}/clear-enrichment:
-    post:
-      description: |-
-        Clear a node's enrichment baseline and purge its cache.
-
-        Replaces the old rollback-to-version endpoint. With ExplorationNode the
-        only meaningful reset target is "no enrichment at all"; the new operation:
-          - resets enrichment_details and enrichment_summary on the story_nodes row
-          - hard-deletes exploration_cache rows so the cleared state is immediately
-            observable to new exploration requests
-          - bumps the node version so stale in-flight cache reads self-invalidate
-          - emits NODE_ENRICHMENT_CLEARED for the audit trail
-
-        Returns 404 if the node does not exist under the provided tenant.
-      operationId: clear_node_enrichment_v1_admin_story__story_id__node__node_id__clear_enrichment_post
-      parameters:
-      - explode: false
-        in: path
-        name: story_id
-        required: true
-        schema:
-          title: Story Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: node_id
-        required: true
-        schema:
-          title: Node Id
-          type: string
-        style: simple
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NodeClearEnrichmentRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NodeClearEnrichmentResponse"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      security:
-      - AdminBearer: []
-      summary: Clear Node Enrichment
-      tags:
-      - admin
-  /v1/authoring/stories:
-    get:
-      description: |-
-        Return a cursor-paginated list of non-deleted stories for the calling tenant.
-
-        Richer than the player-facing ``GET /v1/stories`` — includes
-        ``generation_contract``, ``flag_schema``, and ``characters`` so tenants
-        can inspect how each story was configured at generation time.
-
-        ``limit`` is capped at 100.
-      operationId: list_stories_v1_authoring_stories_get
-      parameters:
-      - explode: true
-        in: query
-        name: cursor
-        required: false
-        schema:
-          nullable: true
-          type: string
-        style: form
-      - explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          default: 20
-          title: Limit
-          type: integer
-        style: form
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedResponse_AuthoringStorySummaryResponse_"
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: List Stories
-      tags:
-      - authoring
-    post:
-      description: |-
-        Generate a new story for the authenticated tenant.
-
-        **Sync mode** (``mode="sync"``, default): generation runs in-process.
-        The response is returned once the pipeline completes (may take 10–60 s
-        depending on story size).  HTTP 201 with ``story_id`` populated.
-
-        **Async mode** (``mode="async"``): the job is enqueued via ARQ.
-        HTTP 202 is returned immediately with ``job_id``; call
-        ``GET /v1/authoring/jobs/{job_id}`` or
-        ``GET /v1/authoring/jobs/{job_id}/stream`` to track progress.
-
-        ``tenant_id`` and ``story_id`` are assigned server-side — do not include
-        them in the request body.
-      operationId: generate_story_v1_authoring_stories_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StoryGenerateRequest"
+              additionalProperties:
+                additionalProperties: {}
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StoryGenerateResponse"
-          description: Sync generation complete — story_id is populated.
-        "202":
-          description: "Async job enqueued — poll /jobs/{job_id} for status."
-        "422":
+                $ref: "#/components/schemas/_v1_admin_story_import_post_201_response"
+          description: Created
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Generate Story
-      tags:
-      - authoring
-  /v1/authoring/stories/{story_id}:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Import a full story graph.
+  /v1/admin/story/scaffold:
+    post:
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_scaffold_post_201_response"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Create a development sample story.
+  /v1/admin/story/{story_id}:
     delete:
-      description: |-
-        Soft-delete a story owned by the calling tenant.
-
-        Sets ``deleted_at``; child rows (nodes, events, sessions) are retained.
-        Idempotent: returns 204 whether or not the story existed.  Returns 422 if
-        ``story_id`` is not a valid UUID.
-      operationId: delete_story_v1_authoring_stories__story_id__delete
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
           type: string
         style: simple
       responses:
         "204":
-          description: Successful Response
-        "422":
+          description: No Content
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Delete Story
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Delete a story as an administrator.
     get:
-      description: |-
-        Return the full story record for a single story owned by the calling tenant.
-
-        Equivalent to ``GET /v1/admin/story/{story_id}`` but authenticated by
-        tenant API key rather than admin bearer token.  Includes
-        ``generation_contract``, ``flag_schema``, ``initial_world_flags``, and
-        the full ``characters`` registry.
-
-        Returns 404 when the story does not exist or belongs to a different tenant.
-      operationId: get_story_v1_authoring_stories__story_id__get
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
           type: string
         style: simple
       responses:
@@ -1381,28 +84,32 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StoryDetailResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Story
-      tags:
-      - authoring
-  /v1/authoring/stories/{story_id}/graph:
-    get:
-      description: Return the full story DAG for the calling tenant.
-      operationId: get_story_graph_v1_authoring_stories__story_id__graph_get
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Read an authored story.
+  /v1/admin/story/{story_id}/node/{node_id}/clear-enrichment:
+    post:
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: node_id
+        required: true
+        schema:
           type: string
         style: simple
       responses:
@@ -1410,28 +117,70 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GraphTopologyResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_admin_story__story_id__node__node_id__clear_enrichment_post_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Story Graph
-      tags:
-      - authoring
-  /v1/authoring/stories/{story_id}/paths:
-    get:
-      description: Return all start-to-end paths for the calling tenant's story.
-      operationId: get_story_paths_v1_authoring_stories__story_id__paths_get
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Clear generated enrichment metadata from a node.
+  /v1/admin/tenant/register:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_admin_tenant_register_post_request"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_tenant_register_post_201_response"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Register a tenant and issue its API key.
+  /v1/admin/tenant/{tenant_id}:
+    delete:
       parameters:
       - explode: false
         in: path
-        name: story_id
+        name: tenant_id
         required: true
         schema:
-          title: Story Id
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Delete a tenant.
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: tenant_id
+        required: true
+        schema:
           type: string
         style: simple
       responses:
@@ -1439,39 +188,161 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PathsResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_admin_tenant__tenant_id__get_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Story Paths
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Read tenant details.
+  /v1/admin/tenant/{tenant_id}/litellm-key:
+    patch:
+      parameters:
+      - explode: false
+        in: path
+        name: tenant_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Rotate tenant LiteLLM key metadata.
+  /v1/admin/tenant/{tenant_id}/llm-key:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: tenant_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_tenant__tenant_id__llm_key_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Read tenant LiteLLM key status.
+  /v1/admin/tenant/{tenant_id}/reprovision-llm-key:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: tenant_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Conflict
+      security:
+      - AdminBearer: []
+      summary: Reprovision a tenant LiteLLM virtual key.
+  /v1/admin/tenants:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/_v1_admin_tenant__tenant_id__get_200_response"
+                type: array
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: List tenants.
+  /v1/admin/terms:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/_v1_admin_terms_get_200_response_inner"
+                type: array
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: List Terms of Service versions.
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_admin_terms_post_request"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_terms_get_200_response_inner"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - AdminBearer: []
+      summary: Create a Terms of Service version.
   /v1/authoring/jobs/{job_id}:
     get:
-      description: |-
-        Return the current status of an async story generation job.
-
-        One-shot JSON alternative to the SSE stream endpoint.  Useful for clients
-        that cannot consume Server-Sent Events.
-
-        ``status`` values:
-        - ``queued``: job is in the ARQ queue but hasn't started.
-        - ``in_progress``: worker is actively processing.
-        - ``complete``: generation succeeded; ``story_id`` is populated.
-        - ``failed``: generation failed; ``error`` contains a sanitised message.
-        - ``not_found``: job_id unknown or TTL expired (> 5 min after completion).
-      operationId: get_job_status_v1_authoring_jobs__job_id__get
       parameters:
       - explode: false
         in: path
         name: job_id
         required: true
         schema:
-          title: Job Id
           type: string
         style: simple
       responses:
@@ -1479,139 +350,165 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/JobStatusResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_authoring_jobs__job_id__get_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Job Status
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Read async authoring job status.
   /v1/authoring/jobs/{job_id}/stream:
     get:
-      description: |-
-        SSE stream that pushes ARQ job lifecycle events until completion.
-
-        Polls ``arq:result:{job_id}`` and ``arq:in-progress:{job_id}`` at 250 ms
-        intervals.  Emits ``queued``, ``in_progress``, ``complete``, ``failed``,
-        and ``heartbeat`` events.  Closes after a terminal event or 5-minute
-        timeout.
-
-        Equivalent to the smoketest ``GET /smoketest/job/{job_id}/status`` but
-        tenant-authenticated and visible in the OpenAPI schema.
-      operationId: stream_job_status_v1_authoring_jobs__job_id__stream_get
       parameters:
       - explode: false
         in: path
         name: job_id
         required: true
         schema:
-          title: Job Id
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_jobs__job_id__get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Stream async authoring job status events.
+  /v1/authoring/stories:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: List authored stories.
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_authoring_stories_post_request"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_scaffold_post_201_response"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Create a story synchronously in development or enqueue async generation.
+  /v1/authoring/stories/{story_id}:
+    delete:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Delete an authored story.
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
           type: string
         style: simple
       responses:
         "200":
           content:
             application/json:
-              schema: {}
-          description: Successful Response
-        "422":
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Stream Job Status
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Read authored story details.
   /v1/authoring/stories/{story_id}/exploration-nodes:
     get:
-      description: |-
-        List exploration nodes for a story with optional filtering and cursor pagination.
-
-        ``parent_node_id`` filters to nodes anchored at a specific DAG node.
-        ``essential`` filters to only essential or non-essential nodes (applied in-memory
-        after the repository fetch since the underlying method returns a plain list).
-        ``cursor`` is the ``id`` of the last item from the previous page — used for
-        simple in-memory slice pagination.  Cursor-based approach is acceptable here
-        because the total count per story is bounded and authoring calls are low-volume.
-      operationId: list_authoring_exploration_nodes_v1_authoring_stories__story_id__exploration_nodes_get
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
           type: string
         style: simple
-      - explode: true
-        in: query
-        name: parent_node_id
-        required: false
-        schema:
-          nullable: true
-          type: string
-        style: form
-      - explode: true
-        in: query
-        name: essential
-        required: false
-        schema:
-          nullable: true
-          type: boolean
-        style: form
-      - explode: true
-        in: query
-        name: cursor
-        required: false
-        schema:
-          nullable: true
-          type: string
-        style: form
-      - explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          default: 50
-          title: Limit
-          type: integer
-        style: form
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PaginatedResponse_ExplorationNodeResponse_"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: List Authoring Exploration Nodes
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: List authored exploration nodes.
   /v1/authoring/stories/{story_id}/exploration-nodes/{node_id}:
     get:
-      description: |-
-        Fetch a single exploration node by ID.
-
-        Returns 404 if the node does not exist or belongs to a different tenant/story.
-        ``picked`` is always ``False`` — authoring routes have no session context.
-      operationId: get_authoring_exploration_node_v1_authoring_stories__story_id__exploration_nodes__node_id__get
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
           type: string
         style: simple
       - explode: false
@@ -1619,7 +516,6 @@ paths:
         name: node_id
         required: true
         schema:
-          title: Node Id
           type: string
         style: simple
       responses:
@@ -1627,44 +523,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExplorationNodeResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Get Authoring Exploration Node
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Read authored exploration node details.
     patch:
-      description: |-
-        Update the ``essential`` flag on an exploration node.
-
-        Only the ``essential`` flag is mutable via the authoring surface.  When
-        ``essential=True``, the node's ``formalized_text`` is always included in the
-        synthesized narrative context entry regardless of byte budget.  This lets
-        authors guarantee that critical discoveries (e.g. "The murderer was seen near
-        the west wing at midnight") are never omitted during generation.
-
-        This operation is idempotent: setting ``essential=True`` on an already-essential
-        node returns the node unchanged.  Omitting ``essential`` from the request body
-        is also a no-op — the node is fetched and returned as-is.
-
-        Returns 404 if the node does not exist or belongs to a different tenant/story.
-        Returns 409 if ``essential=True`` is requested but the parent story node already
-        has materialized child nodes — marking essential after generation would make the
-        essential context invisible to already-generated downstream text.
-        ``picked`` is always ``False`` — authoring routes have no session context.
-      operationId: patch_authoring_exploration_node_v1_authoring_stories__story_id__exploration_nodes__node_id__patch
       parameters:
       - explode: false
         in: path
         name: story_id
         required: true
         schema:
-          title: Story Id
           type: string
         style: simple
       - explode: false
@@ -1672,2174 +548,1179 @@ paths:
         name: node_id
         required: true
         schema:
-          title: Node Id
           type: string
         style: simple
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PatchExplorationNodeRequest"
+              $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes__node_id__patch_request"
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExplorationNodeResponse"
-          description: Successful Response
-        "422":
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner"
+          description: OK
+        default:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-          description: Validation Error
-      summary: Patch Authoring Exploration Node
-      tags:
-      - authoring
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Update authored exploration-node controls.
+  /v1/authoring/stories/{story_id}/graph:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__graph_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: Read authored story graph topology.
+  /v1/authoring/stories/{story_id}/paths:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__paths_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+      summary: List all authored story paths.
+  /v1/health:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_health_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      summary: "Check API, Postgres, and Redis health."
+  /v1/player/{player_id}:
+    delete:
+      parameters:
+      - explode: false
+        in: path
+        name: player_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_player__player_id__delete_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Erase stored player data.
+  /v1/player/{player_id}/data-export:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: player_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_player__player_id__data_export_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Export stored player data.
+  /v1/player/{player_id}/story/{story_id}/warnings/acknowledge:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: player_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Acknowledge content warnings for a player story session.
+  /v1/player/{player_id}/tos-status:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: player_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_player__player_id__tos_status_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Read player Terms of Service acceptance status.
+  /v1/stories:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: List playable stories for the current tenant.
+  /v1/story/{story_id}/choice:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_story__story_id__choice_post_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__choice_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Advance the current session by choosing a structured choice.
+  /v1/story/{story_id}/exploration-nodes:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner"
+                type: array
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: List exploration nodes available at the current story node.
+  /v1/story/{story_id}/exploration-nodes/{node_id}/pick:
+    delete:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: node_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__exploration_nodes__node_id__pick_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Remove an exploration-node pick from the current session.
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: node_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__exploration_nodes__node_id__pick_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Pick an exploration node for the current session.
+  /v1/story/{story_id}/exploration-state:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__exploration_state_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Read exploration state for the current session.
+  /v1/story/{story_id}/explore:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_story__story_id__explore_post_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__explore_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Ask an exploration question at the current story node.
+  /v1/story/{story_id}/free-text:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_story__story_id__free_text_post_request"
+        required: true
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__choice_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Continue the story from free text input using SSE events.
+  /v1/story/{story_id}/graph:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__graph_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Read story graph topology.
+  /v1/story/{story_id}/node/{node_id}:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: node_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__choice_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Read a story node.
+  /v1/story/{story_id}/node/{node_id}/arc:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: node_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  additionalProperties: {}
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Read drama arc analysis for a story node.
+  /v1/story/{story_id}/paths:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_authoring_stories__story_id__paths_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: List all story paths.
+  /v1/story/{story_id}/session:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__session_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Get or create the current player session.
+  /v1/story/{story_id}/session/entity-index:
+    get:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__session_entity_index_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: List discovered entity index entries for the current session.
+  /v1/story/{story_id}/session/lock:
+    delete:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Release a session lock.
+  /v1/story/{story_id}/session/reset:
+    post:
+      parameters:
+      - explode: false
+        in: path
+        name: story_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_story__story_id__session_get_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Reset a completed or forced player session.
+  /v1/terms:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_terms_get_200_response_inner"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      summary: Read the current Terms of Service version.
+  /v1/terms/accept:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/_v1_terms_accept_post_request"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_terms_accept_post_200_response"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/_v1_admin_story_import_post_default_response"
+          description: Error response.
+      security:
+      - PlayerApiKey: []
+        PlayerId: []
+      summary: Accept the current Terms of Service for the current player.
 components:
   schemas:
-    AcceptToSRequest:
-      description: |-
-        Request body for POST /tos/accept (player accepts the current ToS).
-
-        ``tos_version_id`` must be the UUID of the ToS version the player is
-        accepting — validated client-side to prevent stale-version acceptance.
-      example:
-        tos_version_id: tos_version_id
+    _v1_admin_terms_post_request:
       properties:
-        tos_version_id:
-          minLength: 32
-          title: Tos Version Id
-          type: string
-      required:
-      - tos_version_id
-      title: AcceptToSRequest
-    ArcAnalysis:
-      description: Arc analysis result for a story node at a given graph depth.
-      example:
-        phase: phase
-        tension_label: tension_label
-        depth: 6
-        choices_reordered: true
-        ideal_tension: 5.637376656633329
-        max_nodes: 1
-        progress: 5.962133916683182
-        deviation: 2.3021358869347655
-        unbounded: false
-        drama_score: 0.8008281904610115
-        on_track: true
-      properties:
-        drama_score:
-          title: Drama Score
-          type: number
-        tension_label:
-          title: Tension Label
-          type: string
-        depth:
-          title: Depth
-          type: integer
-        max_nodes:
-          title: Max Nodes
-          type: integer
-        progress:
-          title: Progress
-          type: number
-        phase:
-          title: Phase
-          type: string
-        ideal_tension:
-          title: Ideal Tension
-          type: number
-        deviation:
-          title: Deviation
-          type: number
-        on_track:
-          title: On Track
-          type: boolean
-        choices_reordered:
-          title: Choices Reordered
-          type: boolean
-        unbounded:
-          default: false
-          title: Unbounded
-          type: boolean
-      required:
-      - choices_reordered
-      - depth
-      - deviation
-      - drama_score
-      - ideal_tension
-      - max_nodes
-      - on_track
-      - phase
-      - progress
-      - tension_label
-      title: ArcAnalysis
-    AuthoringStorySummaryResponse:
-      description: |-
-        Story summary item for GET /v1/authoring/stories.
-
-        Richer than the player-facing ``StorySummaryResponse`` — includes
-        ``generation_contract`` and authoring metadata so tenants can inspect
-        how each story was originally generated.
-      example:
-        characters:
-          key:
-            backstory: ""
-            voice: ""
-            role: role
-            traits:
-            - traits
-            - traits
-            motive: motive
-            name: name
-        story_id: story_id
-        flag_schema:
-          key: ""
-        objects:
-          key:
-            object_type: ""
-            holder_id: ""
-            name: name
-            description: description
-            location_id: ""
-        genre: genre
-        max_nodes: 0
-        locations:
-          key:
-            atmosphere: ""
-            connected_to:
-            - connected_to
-            - connected_to
-            name: name
-            description: description
-            region: ""
-        start_node_id: start_node_id
-        generation_contract:
-          key: ""
-        title: title
-        unbounded: false
-      properties:
-        story_id:
-          title: Story Id
-          type: string
-        title:
-          title: Title
-          type: string
-        start_node_id:
-          title: Start Node Id
-          type: string
-        max_nodes:
-          title: Max Nodes
-          type: integer
-        unbounded:
-          default: false
-          title: Unbounded
-          type: boolean
-        genre:
-          nullable: true
-          type: string
-        flag_schema:
-          additionalProperties: true
-          default: {}
-          title: Flag Schema
-          type: object
-        characters:
-          additionalProperties:
-            $ref: "#/components/schemas/CharacterSpecResponse"
-          default: {}
-          title: Characters
-        locations:
-          additionalProperties:
-            $ref: "#/components/schemas/LocationSpecResponse"
-          default: {}
-          title: Locations
-        objects:
-          additionalProperties:
-            $ref: "#/components/schemas/ObjectSpecResponse"
-          default: {}
-          title: Objects
-        generation_contract:
-          additionalProperties: true
-          nullable: true
-          type: object
-      required:
-      - max_nodes
-      - start_node_id
-      - story_id
-      - title
-      title: AuthoringStorySummaryResponse
-    CharacterSpecResponse:
-      description: Author-defined character with traits and motives.
-      example:
-        backstory: ""
-        voice: ""
-        role: role
-        traits:
-        - traits
-        - traits
-        motive: motive
-        name: name
-      properties:
-        name:
-          title: Name
-          type: string
-        role:
-          title: Role
-          type: string
-        traits:
-          items:
-            type: string
-          title: Traits
-          type: array
-        motive:
-          title: Motive
-          type: string
-        backstory:
-          default: ""
-          title: Backstory
-          type: string
-        voice:
-          default: ""
-          title: Voice
-          type: string
-      required:
-      - motive
-      - name
-      - role
-      - traits
-      title: CharacterSpecResponse
-    ChoiceRequest:
-      description: "Request body for POST /story/{story_id}/choice (authored choices\
-        \ only)."
-      example:
-        idempotency_key: idempotency_key
-        choice_id: choice_id
-        node_id: node_id
-        lock_token: lock_token
-      properties:
-        choice_id:
-          minLength: 1
-          title: Choice Id
-          type: string
-        node_id:
-          minLength: 1
-          title: Node Id
-          type: string
-        idempotency_key:
-          minLength: 1
-          title: Idempotency Key
-          type: string
-        lock_token:
-          nullable: true
-          type: string
-      required:
-      - choice_id
-      - idempotency_key
-      - node_id
-      title: ChoiceRequest
-    ChoiceResponse:
-      description: |-
-        A single authored or LLM-generated player choice surfaced by the API.
-
-        ``target_node_id`` is intentionally exposed to the client to enable
-        prefetching of the next node's content before the player commits.
-        ``flag_delta`` contains world-state mutations that apply when this choice
-        is taken; the client may use this to preview consequences.
-        ``flag_schema_delta`` carries schema entries for the flags mentioned in
-        ``flag_delta`` when they are available on the current branch.
-      example:
-        flag_delta:
-          key: ""
-        flag_schema_delta:
-          key: ""
-        id: id
-        label: label
-        target_node_id: target_node_id
-      properties:
-        id:
-          title: Id
-          type: string
-        label:
-          title: Label
-          type: string
-        target_node_id:
-          nullable: true
-          type: string
-        flag_delta:
-          additionalProperties: true
-          default: {}
-          title: Flag Delta
-          type: object
-        flag_schema_delta:
-          additionalProperties: true
-          default: {}
-          title: Flag Schema Delta
-          type: object
-      required:
-      - id
-      - label
-      - target_node_id
-      title: ChoiceResponse
-    CreateToSVersionRequest:
-      description: |-
-        Request body for POST /admin/tos (publish a new ToS version).
-
-        ``effective_date`` must be a ``YYYY-MM-DD`` calendar date string.  The new
-        version becomes current once its ``effective_date`` is in the past or today.
-      example:
-        effective_date: effective_date
-        version_number: version_number
-        content: content
-      properties:
-        version_number:
-          minLength: 1
-          title: Version Number
-          type: string
         content:
-          minLength: 1
-          title: Content
           type: string
         effective_date:
-          maxLength: 10
-          minLength: 10
-          title: Effective Date
+          type: string
+        version_number:
           type: string
       required:
       - content
       - effective_date
       - version_number
-      title: CreateToSVersionRequest
-    EntityIndexResponse:
-      description: Per-playthrough entity provenance index for the current player
-        session.
+    _v1_story__story_id__exploration_state_get_200_response_recent_turns_inner:
       example:
-        playthrough_id: playthrough_id
-        entries:
-        - last_updated_at_node_id: last_updated_at_node_id
-          entity_type: entity_type
-          introduced_at_node_id: introduced_at_node_id
-          last_updated_at: 2000-01-23T04:56:07.000+00:00
-          introduced_at_choice_id: introduced_at_choice_id
-          entity_id: entity_id
-          last_updated_at_choice_id: last_updated_at_choice_id
-          introduced_at: 2000-01-23T04:56:07.000+00:00
-        - last_updated_at_node_id: last_updated_at_node_id
-          entity_type: entity_type
-          introduced_at_node_id: introduced_at_node_id
-          last_updated_at: 2000-01-23T04:56:07.000+00:00
-          introduced_at_choice_id: introduced_at_choice_id
-          entity_id: entity_id
-          last_updated_at_choice_id: last_updated_at_choice_id
-          introduced_at: 2000-01-23T04:56:07.000+00:00
-        session_id: session_id
-      properties:
-        session_id:
-          title: Session Id
-          type: string
-        playthrough_id:
-          title: Playthrough Id
-          type: string
-        entries:
-          items:
-            $ref: "#/components/schemas/EntityProvenanceEntryResponse"
-          title: Entries
-          type: array
-      required:
-      - entries
-      - playthrough_id
-      - session_id
-      title: EntityIndexResponse
-    EntityProvenanceEntryResponse:
-      description: A single per-session entity provenance row.
-      example:
-        last_updated_at_node_id: last_updated_at_node_id
-        entity_type: entity_type
-        introduced_at_node_id: introduced_at_node_id
-        last_updated_at: 2000-01-23T04:56:07.000+00:00
-        introduced_at_choice_id: introduced_at_choice_id
-        entity_id: entity_id
-        last_updated_at_choice_id: last_updated_at_choice_id
-        introduced_at: 2000-01-23T04:56:07.000+00:00
-      properties:
-        entity_type:
-          title: Entity Type
-          type: string
-        entity_id:
-          title: Entity Id
-          type: string
-        introduced_at_node_id:
-          title: Introduced At Node Id
-          type: string
-        introduced_at_choice_id:
-          nullable: true
-          type: string
-        last_updated_at_node_id:
-          nullable: true
-          type: string
-        last_updated_at_choice_id:
-          nullable: true
-          type: string
-        introduced_at:
-          format: date-time
-          title: Introduced At
-          type: string
-        last_updated_at:
-          format: date-time
-          nullable: true
-          type: string
-      required:
-      - entity_id
-      - entity_type
-      - introduced_at
-      - introduced_at_choice_id
-      - introduced_at_node_id
-      - last_updated_at
-      - last_updated_at_choice_id
-      - last_updated_at_node_id
-      title: EntityProvenanceEntryResponse
-    EntityProvenanceExportEntryResponse:
-      description: A stable player data export row for entity provenance.
-      example:
-        tenant_id: tenant_id
-        playthrough_id: playthrough_id
-        last_updated_at_node_id: last_updated_at_node_id
-        introduced_at_node_id: introduced_at_node_id
-        story_id: story_id
-        introduced_at_choice_id: introduced_at_choice_id
-        session_id: session_id
-        entity_id: entity_id
-        entity_type: entity_type
-        last_updated_at: 2000-01-23T04:56:07.000+00:00
-        id: id
-        last_updated_at_choice_id: last_updated_at_choice_id
-        introduced_at: 2000-01-23T04:56:07.000+00:00
-      properties:
-        id:
-          title: Id
-          type: string
-        tenant_id:
-          title: Tenant Id
-          type: string
-        story_id:
-          title: Story Id
-          type: string
-        session_id:
-          title: Session Id
-          type: string
-        playthrough_id:
-          title: Playthrough Id
-          type: string
-        entity_type:
-          title: Entity Type
-          type: string
-        entity_id:
-          title: Entity Id
-          type: string
-        introduced_at_node_id:
-          title: Introduced At Node Id
-          type: string
-        introduced_at_choice_id:
-          nullable: true
-          type: string
-        last_updated_at_node_id:
-          nullable: true
-          type: string
-        last_updated_at_choice_id:
-          nullable: true
-          type: string
-        introduced_at:
-          format: date-time
-          title: Introduced At
-          type: string
-        last_updated_at:
-          format: date-time
-          nullable: true
-          type: string
-      required:
-      - entity_id
-      - entity_type
-      - id
-      - introduced_at
-      - introduced_at_choice_id
-      - introduced_at_node_id
-      - last_updated_at
-      - last_updated_at_choice_id
-      - last_updated_at_node_id
-      - playthrough_id
-      - session_id
-      - story_id
-      - tenant_id
-      title: EntityProvenanceExportEntryResponse
-    ErrorResponse:
-      description: Machine-parseable error envelope returned on all non-2xx responses.
-      example:
-        error_code: error_code
-        details:
-          key: ""
-        retry_after: 0
-        message: message
-      properties:
-        error_code:
-          title: Error Code
-          type: string
-        message:
-          title: Message
-          type: string
-        details:
-          additionalProperties: true
-          default: {}
-          title: Details
-          type: object
-        retry_after:
-          nullable: true
-          type: integer
-      required:
-      - error_code
-      - message
-      title: ErrorResponse
-    ExplorationNodeResponse:
-      description: |-
-        Single exploration Q&A discovery node returned by exploration-node list/get routes.
-
-        Used by both player routes (where ``picked`` reflects the session/playthrough
-        pick state) and authoring routes (where ``picked`` is always ``False`` because
-        there is no session context in the authoring layer).
-      example:
-        question: question
         answer: answer
-        picked: true
-        detail_delta:
-          key: ""
+        question: question
+        created_at: created_at
+        normalized_question: normalized_question
         id: id
-        parent_node_id: parent_node_id
-        formalized_text: formalized_text
-        essential: true
+        node_id: node_id
       properties:
-        id:
-          title: Id
-          type: string
-        parent_node_id:
-          title: Parent Node Id
-          type: string
-        question:
-          title: Question
-          type: string
         answer:
-          title: Answer
-          type: string
-        formalized_text:
-          title: Formalized Text
-          type: string
-        essential:
-          title: Essential
-          type: boolean
-        picked:
-          title: Picked
-          type: boolean
-        detail_delta:
-          additionalProperties: true
-          default: {}
-          title: Detail Delta
-          type: object
-      required:
-      - answer
-      - essential
-      - formalized_text
-      - id
-      - parent_node_id
-      - picked
-      - question
-      title: ExplorationNodeResponse
-    ExplorationPickResponse:
-      description: |-
-        Response returned by POST/DELETE /exploration-nodes/{id}/pick.
-
-        Reflects the pick state AFTER the operation has been applied.
-        ``picked=True`` after a POST (player opted in); ``picked=False`` after a
-        DELETE (player opted out or was never opted in — idempotent).
-      example:
-        picked: true
-        exploration_node_id: exploration_node_id
-      properties:
-        exploration_node_id:
-          title: Exploration Node Id
-          type: string
-        picked:
-          title: Picked
-          type: boolean
-      required:
-      - exploration_node_id
-      - picked
-      title: ExplorationPickResponse
-    ExplorationRecentTurnResponse:
-      description: |-
-        Privacy-preserving recent-turn metadata for exploration state reads.
-
-        ``question_hash`` lets clients de-duplicate or reconcile local UI state
-        after a reload without receiving the player's raw question text.  It is a
-        canonical SHA-256 hash of the normalized question.
-        The answer is omitted for the same reason; exact answer replay remains on
-        the idempotent POST response, not the default state read model.
-      example:
-        exploration_turn_id: exploration_turn_id
-        redirect_reason: redirect_reason
-        cache_hit: true
-        requires_action: true
-        question_hash: question_hash
-        created_at: ""
-        cache_source: cache_source
-      properties:
-        exploration_turn_id:
-          title: Exploration Turn Id
-          type: string
-        question_hash:
-          title: Question Hash
-          type: string
-        cache_source:
-          title: Cache Source
-          type: string
-        cache_hit:
-          title: Cache Hit
-          type: boolean
-        requires_action:
-          title: Requires Action
-          type: boolean
-        redirect_reason:
-          nullable: true
           type: string
         created_at:
-          default: ""
-          title: Created At
           type: string
-      required:
-      - cache_hit
-      - cache_source
-      - exploration_turn_id
-      - question_hash
-      - requires_action
-      title: ExplorationRecentTurnResponse
-    ExplorationRequest:
-      description: |-
-        Request body for POST /story/{story_id}/explore.
-
-        Exploration is a non-advancing read-plus-enrichment path. The endpoint
-        still requires an idempotency key because successful answers can persist a
-        player-owned turn, an overlay merge, and cache metadata.
-
-        ``node_id`` is expected to be the session's current node. This keeps the
-        route from becoming a general story-inspection API and matches the privacy
-        boundary used by the state read endpoint. ``lock_token`` is accepted only
-        as the existing client/device ownership token; the route still acquires the
-        Redis session-context lock before calling the exploration service.
-      example:
-        question: question
-        idempotency_key: idempotency_key
-        node_id: node_id
-        lock_token: lock_token
-      properties:
+        id:
+          type: string
         node_id:
-          minLength: 1
-          title: Node Id
+          type: string
+        normalized_question:
           type: string
         question:
-          maxLength: 500
-          minLength: 1
-          title: Question
-          type: string
-        idempotency_key:
-          minLength: 1
-          title: Idempotency Key
-          type: string
-        lock_token:
-          nullable: true
           type: string
       required:
-      - idempotency_key
+      - answer
+      - created_at
+      - id
       - node_id
+      - normalized_question
       - question
-      title: ExplorationRequest
-    ExplorationStateResponse:
-      description: |-
-        Default player-facing read model for current-node exploration state.
-
-        Raw ``question`` and ``answer`` turn text are intentionally absent here.
-        Clients get the shared node enrichment summary/details plus HMACed
-        recent-turn metadata; raw transcript readback belongs behind the later
-        privacy/export gates rather than this reload-friendly endpoint.
+    _v1_terms_accept_post_200_response:
       example:
-        enrichment_details:
-          key: ""
-        question_count: 0
-        playthrough_id: playthrough_id
-        recent_turns:
-        - exploration_turn_id: exploration_turn_id
-          redirect_reason: redirect_reason
-          cache_hit: true
-          requires_action: true
-          question_hash: question_hash
-          created_at: ""
-          cache_source: cache_source
-        - exploration_turn_id: exploration_turn_id
-          redirect_reason: redirect_reason
-          cache_hit: true
-          requires_action: true
-          question_hash: question_hash
-          created_at: ""
-          cache_source: cache_source
-        current_node_id: current_node_id
-        node_id: node_id
+        accepted: true
+        version_id: version_id
       properties:
-        node_id:
-          title: Node Id
-          type: string
-        current_node_id:
-          title: Current Node Id
-          type: string
-        playthrough_id:
-          title: Playthrough Id
-          type: string
-        enrichment_details:
-          additionalProperties: true
-          default: {}
-          title: Enrichment Details
-          type: object
-        question_count:
-          default: 0
-          title: Question Count
-          type: integer
-        recent_turns:
-          default: []
-          items:
-            $ref: "#/components/schemas/ExplorationRecentTurnResponse"
-          title: Recent Turns
-          type: array
-      required:
-      - current_node_id
-      - node_id
-      - playthrough_id
-      title: ExplorationStateResponse
-    FreeTextRequest:
-      description: "Request body for POST /story/{story_id}/free-text (LLM pipeline,\
-        \ SSE response)."
-      example:
-        idempotency_key: idempotency_key
-        free_text: free_text
-        node_id: node_id
-        lock_token: lock_token
-      properties:
-        node_id:
-          minLength: 1
-          title: Node Id
-          type: string
-        free_text:
-          maxLength: 500
-          minLength: 1
-          title: Free Text
-          type: string
-        idempotency_key:
-          minLength: 1
-          title: Idempotency Key
-          type: string
-        lock_token:
-          nullable: true
-          type: string
-      required:
-      - free_text
-      - idempotency_key
-      - node_id
-      title: FreeTextRequest
-    GraphEdge:
-      description: |-
-        A directed edge in the story DAG topology view.
-
-        Represents a choice arc from ``from_node_id`` to ``to_node_id``.
-        ``label`` is the human-readable choice text; it may be ``None`` for
-        internally generated bridge nodes that have no visible label.
-      example:
-        from_node_id: from_node_id
-        label: label
-        choice_id: choice_id
-        to_node_id: to_node_id
-      properties:
-        from_node_id:
-          title: From Node Id
-          type: string
-        choice_id:
-          title: Choice Id
-          type: string
-        to_node_id:
-          title: To Node Id
-          type: string
-        label:
-          nullable: true
-          type: string
-      required:
-      - choice_id
-      - from_node_id
-      - to_node_id
-      title: GraphEdge
-    GraphTopologyResponse:
-      description: |-
-        Full DAG structure returned by GET /story/{id}/topology.
-
-        Intended for author tooling and debugging.  ``nodes`` is a list of
-        ``{id, node_type}`` dicts.  ``edges`` encodes each choice arc.
-        ``flag_schema`` and ``characters`` are the author-declared game-state
-        definitions for the story.
-      example:
-        characters:
-          key: ""
-        nodes:
-        - key: nodes
-        - key: nodes
-        story_id: story_id
-        flag_schema:
-          key: ""
-        objects:
-          key: ""
-        allow_free_text_continuation: true
-        edges:
-        - from_node_id: from_node_id
-          label: label
-          choice_id: choice_id
-          to_node_id: to_node_id
-        - from_node_id: from_node_id
-          label: label
-          choice_id: choice_id
-          to_node_id: to_node_id
-        locations:
-          key: ""
-        start_node_id: start_node_id
-        exploration_nodes:
-        - key: ""
-        - key: ""
-      properties:
-        story_id:
-          title: Story Id
-          type: string
-        start_node_id:
-          title: Start Node Id
-          type: string
-        nodes:
-          items:
-            additionalProperties:
-              type: string
-          title: Nodes
-          type: array
-        edges:
-          items:
-            $ref: "#/components/schemas/GraphEdge"
-          title: Edges
-          type: array
-        flag_schema:
-          additionalProperties: true
-          default: {}
-          title: Flag Schema
-          type: object
-        characters:
-          additionalProperties: true
-          default: {}
-          title: Characters
-          type: object
-        locations:
-          additionalProperties: true
-          default: {}
-          title: Locations
-          type: object
-        objects:
-          additionalProperties: true
-          default: {}
-          title: Objects
-          type: object
-        allow_free_text_continuation:
-          default: true
-          title: Allow Free Text Continuation
+        accepted:
           type: boolean
-        exploration_nodes:
-          default: []
+        version_id:
+          type: string
+      required:
+      - accepted
+      - version_id
+    _v1_player__player_id__data_export_get_200_response:
+      example:
+        tenant_id: tenant_id
+        entity_provenance:
+        - key: ""
+        - key: ""
+        sessions:
+        - key: ""
+        - key: ""
+        exploration:
+          key:
+            key: ""
+        player_id: player_id
+        tos_acceptances:
+        - key: ""
+        - key: ""
+        generated_at: generated_at
+        story_events:
+        - key: ""
+        - key: ""
+      properties:
+        entity_provenance:
           items:
             additionalProperties: true
-            nullable: true
             type: object
-          title: Exploration Nodes
           type: array
-      required:
-      - edges
-      - nodes
-      - start_node_id
-      - story_id
-      title: GraphTopologyResponse
-    HTTPValidationError:
-      example:
-        detail:
-        - msg: msg
-          loc:
-          - Location_inner
-          - Location_inner
-          input: ""
-          ctx: "{}"
-          type: type
-        - msg: msg
-          loc:
-          - Location_inner
-          - Location_inner
-          input: ""
-          ctx: "{}"
-          type: type
-      properties:
-        detail:
+        exploration:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        generated_at:
+          type: string
+        player_id:
+          type: string
+        sessions:
           items:
-            $ref: "#/components/schemas/ValidationError"
-          title: Detail
+            additionalProperties: true
+            type: object
           type: array
-      title: HTTPValidationError
-    HealthResponse:
-      description: |-
-        Response body for GET /health.
-
-        ``status`` is the aggregate health: ``"ok"`` when all required services
-        are reachable, ``"degraded"`` when some optional services are down,
-        ``"unavailable"`` when a required service (Postgres or Redis) is unreachable.
-      example:
-        version: version
-        postgres: postgres
-        redis: redis
-        status: status
+        story_events:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+        tenant_id:
+          type: string
+        tos_acceptances:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+      required:
+      - entity_provenance
+      - exploration
+      - generated_at
+      - player_id
+      - sessions
+      - story_events
+      - tenant_id
+      - tos_acceptances
+    _v1_story__story_id__explore_post_request:
       properties:
-        status:
-          title: Status
+        idempotency_key:
           type: string
-        postgres:
-          title: Postgres
+        node_id:
           type: string
-        redis:
-          title: Redis
-          type: string
-        version:
-          title: Version
+        question:
           type: string
       required:
-      - postgres
-      - redis
-      - status
-      - version
-      title: HealthResponse
-    JobStatusResponse:
-      description: |-
-        Response for GET /v1/authoring/jobs/{job_id}.
-
-        One-shot JSON status check for an async story generation job.
-        Clients that cannot consume SSE should poll this endpoint.
-
-        ``status`` values:
-        - ``queued``: job is in the ARQ queue but hasn't started.
-        - ``in_progress``: worker is actively generating.
-        - ``complete``: generation succeeded; ``story_id`` is populated.
-        - ``failed``: generation failed; ``error`` contains a sanitised message.
-        - ``not_found``: job_id is unknown or TTL has expired (> 5 min old).
+      - node_id
+      - question
+    _v1_authoring_stories__story_id__exploration_nodes_get_200_response:
+      example:
+        next_cursor: next_cursor
+        has_more: true
+        items:
+        - answer: answer
+          question: question
+          picked: true
+          detail_delta:
+            key:
+              key: ""
+          normalized_question: normalized_question
+          id: id
+          essential: true
+          formalized_text: formalized_text
+          parent_node_id: parent_node_id
+        - answer: answer
+          question: question
+          picked: true
+          detail_delta:
+            key:
+              key: ""
+          normalized_question: normalized_question
+          id: id
+          essential: true
+          formalized_text: formalized_text
+          parent_node_id: parent_node_id
+      properties:
+        has_more:
+          type: boolean
+        items:
+          items:
+            $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - has_more
+      - items
+    _v1_authoring_stories__story_id__paths_get_200_response:
+      example:
+        paths:
+        - - paths
+          - paths
+        - - paths
+          - paths
+        story_id: story_id
+      properties:
+        paths:
+          items:
+            items:
+              type: string
+            type: array
+          type: array
+        story_id:
+          type: string
+      required:
+      - paths
+      - story_id
+    _v1_player__player_id__delete_200_response:
+      example:
+        tenant_id: tenant_id
+        deleted:
+          key: 0
+        player_id: player_id
+      properties:
+        deleted:
+          additionalProperties:
+            type: integer
+        player_id:
+          type: string
+        tenant_id:
+          type: string
+      required:
+      - deleted
+      - player_id
+      - tenant_id
+    _v1_authoring_jobs__job_id__get_200_response:
       example:
         job_id: job_id
         story_id: story_id
         error: error
         status: status
       properties:
+        error:
+          type: string
         job_id:
-          title: Job Id
           type: string
         status:
-          title: Status
           type: string
         story_id:
-          nullable: true
-          type: string
-        error:
-          nullable: true
           type: string
       required:
       - job_id
       - status
-      title: JobStatusResponse
-    LocationSpecResponse:
-      description: Author-defined location with description and spatial connections.
+    _v1_authoring_stories_get_200_response_items_inner:
       example:
-        atmosphere: ""
-        connected_to:
-        - connected_to
-        - connected_to
-        name: name
-        description: description
-        region: ""
+        content_warnings:
+        - content_warnings
+        - content_warnings
+        story_id: story_id
+        genre: genre
+        max_nodes: 0
+        start_node_id: start_node_id
+        title: title
+        unbounded: true
       properties:
-        name:
-          title: Name
-          type: string
-        description:
-          title: Description
-          type: string
-        region:
-          default: ""
-          title: Region
-          type: string
-        atmosphere:
-          default: ""
-          title: Atmosphere
-          type: string
-        connected_to:
-          default: []
+        content_warnings:
           items:
             type: string
-          title: Connected To
           type: array
-      required:
-      - description
-      - name
-      title: LocationSpecResponse
-    NodeClearEnrichmentRequest:
-      description: |-
-        Admin request to clear a node's enrichment baseline.
-
-        Replacing rollback-to-version: with ExplorationNode the only meaningful
-        reset target is "no enrichment at all", so a single clear operation is
-        sufficient. reason and actor_admin_id are mandatory for the audit trail.
-      example:
-        reason: reason
-        actor_admin_id: actor_admin_id
-      properties:
-        reason:
-          maxLength: 500
-          minLength: 1
-          title: Reason
+        genre:
           type: string
-        actor_admin_id:
-          maxLength: 120
-          minLength: 1
-          title: Actor Admin Id
-          type: string
-      required:
-      - actor_admin_id
-      - reason
-      title: NodeClearEnrichmentRequest
-    NodeClearEnrichmentResponse:
-      description: Response confirming a successful node enrichment clear.
-      example:
-        story_id: story_id
-        message: message
-        version: 0
-        node_id: node_id
-      properties:
-        node_id:
-          title: Node Id
+        max_nodes:
+          type: integer
+        start_node_id:
           type: string
         story_id:
-          title: Story Id
           type: string
-        version:
-          title: Version
-          type: integer
-        message:
-          title: Message
+        title:
+          type: string
+        unbounded:
+          type: boolean
+      required:
+      - max_nodes
+      - start_node_id
+      - story_id
+      - title
+      - unbounded
+    _v1_authoring_stories__story_id__graph_get_200_response_nodes_value_choices_inner:
+      example:
+        id: id
+        label: label
+        target_node_id: target_node_id
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        target_node_id:
           type: string
       required:
-      - message
-      - node_id
-      - story_id
-      - version
-      title: NodeClearEnrichmentResponse
-    NodeMetadata:
-      description: |-
-        Audience and arc metadata attached to every node response.
-
-        ``drama_score`` is populated by ``DramaManager`` when arc analysis is
-        available; it is ``None`` for nodes retrieved without arc context.
+      - id
+      - label
+      - target_node_id
+    _v1_authoring_stories_post_request:
+      properties:
+        age_rating:
+          type: string
+        allow_free_text_continuation:
+          type: boolean
+        allow_llm_characters:
+          type: boolean
+        allow_llm_locations:
+          type: boolean
+        allow_llm_objects:
+          type: boolean
+        characters:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_characters_value"
+        complexity:
+          type: integer
+        flag_schema:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        genre:
+          type: string
+        history_context_window:
+          type: integer
+        history_summary_max_chars:
+          type: integer
+        initial_world_flags:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        locations:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_locations_value"
+        mode:
+          type: string
+        objects:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_objects_value"
+        outcome_anchors:
+          items:
+            type: string
+          type: array
+        prompt:
+          type: string
+        target_node_count:
+          type: integer
+        themes:
+          items:
+            type: string
+          type: array
+        title:
+          type: string
+        unbounded:
+          type: boolean
+        world_system_prompt:
+          type: string
+    _v1_player__player_id__tos_status_get_200_response:
       example:
+        accepted: true
+        version: version
+      properties:
+        accepted:
+          type: boolean
+        version:
+          type: string
+      required:
+      - accepted
+    _v1_story__story_id__choice_post_200_response_metadata:
+      example:
+        complexity: 0
         themes:
         - themes
         - themes
-        complexity: 0
         mood: mood
         age_rating: age_rating
         genre: genre
         drama_score: 6.027456183070403
       properties:
         age_rating:
-          title: Age Rating
+          type: string
+        complexity:
+          type: integer
+        drama_score:
+          type: number
+        genre:
           type: string
         mood:
-          title: Mood
-          type: string
-        genre:
-          title: Genre
           type: string
         themes:
           items:
             type: string
-          title: Themes
           type: array
-        complexity:
-          title: Complexity
-          type: integer
-        drama_score:
-          nullable: true
-          type: number
       required:
       - age_rating
       - complexity
       - genre
       - mood
       - themes
-      title: NodeMetadata
-    NodeResponse:
-      description: |-
-        Full representation of a story node returned by GET /node and SSE done events.
-
-        ``end_reason`` is non-null only on END nodes: ``"depth_cap"`` means the
-        story ended because the player hit ``max_nodes``; ``"llm_decided"`` means
-        the LLM chose to end the narrative naturally.
-
-        ``resolved_anchor`` is non-null only on END nodes that clearly matched one
-        of the story's declared ``outcome_anchors``; it contains the verbatim anchor
-        text that was reached.
-
-        ``character_delta`` lists character IDs introduced at this node so the
-        client can display character-introduction UI inline. Generated character
-        specs are stored server-side on the node and applied to the session cache.
-        ``location_delta`` carries full location schemas discovered at this node.
-        ``object_delta`` carries full object schemas introduced/found at this node.
-        ``flag_schema_delta`` carries newly introduced flag schema entries declared
-        at this node.
+    _v1_story__story_id__explore_post_200_response:
       example:
-        metadata:
-          themes:
-          - themes
-          - themes
-          complexity: 0
-          mood: mood
-          age_rating: age_rating
-          genre: genre
-          drama_score: 6.027456183070403
-        end_reason: end_reason
-        flag_delta:
-          key: ""
-        object_delta:
+        canonical_detail_version: 0
+        redirect_reason: redirect_reason
+        current_node_id_before: current_node_id_before
+        requires_action: true
+        confidence: confidence
+        formalized_text: formalized_text
+        exploration_turn_id: exploration_turn_id
+        hidden_info_requested: true
+        cache_hit: true
+        answer: answer
+        detail_delta:
           key:
-            object_type: ""
-            holder_id: ""
-            name: name
-            description: description
-            location_id: ""
-        resolved_anchor: resolved_anchor
-        character_delta:
-        - character_delta
-        - character_delta
-        node_type: node_type
-        flag_schema_delta:
-          key: ""
-        history_summary: history_summary
-        text: text
-        choices:
-        - flag_delta:
             key: ""
-          flag_schema_delta:
-            key: ""
-          id: id
-          label: label
-          target_node_id: target_node_id
-        - flag_delta:
-            key: ""
-          flag_schema_delta:
-            key: ""
-          id: id
-          label: label
-          target_node_id: target_node_id
+        current_node_id_after: current_node_id_after
+        exploration_node_id: exploration_node_id
+        cache_source: cache_source
+        overlay_version: 6
+        idempotency_replay: true
         node_id: node_id
-        location_delta:
-          key:
-            atmosphere: ""
-            connected_to:
-            - connected_to
-            - connected_to
-            name: name
-            description: description
-            region: ""
       properties:
+        answer:
+          type: string
+        cache_hit:
+          type: boolean
+        cache_source:
+          type: string
+        canonical_detail_version:
+          type: integer
+        confidence:
+          type: string
+        current_node_id_after:
+          type: string
+        current_node_id_before:
+          type: string
+        detail_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        exploration_node_id:
+          type: string
+        exploration_turn_id:
+          type: string
+        formalized_text:
+          type: string
+        hidden_info_requested:
+          type: boolean
+        idempotency_replay:
+          type: boolean
         node_id:
-          title: Node Id
           type: string
-        text:
-          title: Text
-          type: string
-        node_type:
-          title: Node Type
-          type: string
-        choices:
-          items:
-            $ref: "#/components/schemas/ChoiceResponse"
-          title: Choices
-          type: array
-        metadata:
-          $ref: "#/components/schemas/NodeMetadata"
-        flag_delta:
-          additionalProperties: true
-          default: {}
-          title: Flag Delta
-          type: object
-        flag_schema_delta:
-          additionalProperties: true
-          default: {}
-          title: Flag Schema Delta
-          type: object
-        end_reason:
-          nullable: true
-          type: string
-        resolved_anchor:
-          nullable: true
-          type: string
-        character_delta:
-          default: []
-          items:
-            nullable: true
-            type: string
-          title: Character Delta
-          type: array
-        location_delta:
-          additionalProperties:
-            $ref: "#/components/schemas/LocationSpecResponse"
-          default: {}
-          title: Location Delta
-        object_delta:
-          additionalProperties:
-            $ref: "#/components/schemas/ObjectSpecResponse"
-          default: {}
-          title: Object Delta
-        history_summary:
-          nullable: true
-          type: string
-      required:
-      - choices
-      - metadata
-      - node_id
-      - node_type
-      - text
-      title: NodeResponse
-    ObjectSpecResponse:
-      description: "Author-defined object with type, starting location, and initial\
-        \ holder."
-      example:
-        object_type: ""
-        holder_id: ""
-        name: name
-        description: description
-        location_id: ""
-      properties:
-        name:
-          title: Name
-          type: string
-        description:
-          title: Description
-          type: string
-        object_type:
-          default: ""
-          title: Object Type
-          type: string
-        location_id:
-          default: ""
-          title: Location Id
-          type: string
-        holder_id:
-          default: ""
-          title: Holder Id
-          type: string
-      required:
-      - description
-      - name
-      title: ObjectSpecResponse
-    PaginatedResponse_AuthoringStorySummaryResponse_:
-      example:
-        next_cursor: next_cursor
-        has_more: true
-        items:
-        - characters:
-            key:
-              backstory: ""
-              voice: ""
-              role: role
-              traits:
-              - traits
-              - traits
-              motive: motive
-              name: name
-          story_id: story_id
-          flag_schema:
-            key: ""
-          objects:
-            key:
-              object_type: ""
-              holder_id: ""
-              name: name
-              description: description
-              location_id: ""
-          genre: genre
-          max_nodes: 0
-          locations:
-            key:
-              atmosphere: ""
-              connected_to:
-              - connected_to
-              - connected_to
-              name: name
-              description: description
-              region: ""
-          start_node_id: start_node_id
-          generation_contract:
-            key: ""
-          title: title
-          unbounded: false
-        - characters:
-            key:
-              backstory: ""
-              voice: ""
-              role: role
-              traits:
-              - traits
-              - traits
-              motive: motive
-              name: name
-          story_id: story_id
-          flag_schema:
-            key: ""
-          objects:
-            key:
-              object_type: ""
-              holder_id: ""
-              name: name
-              description: description
-              location_id: ""
-          genre: genre
-          max_nodes: 0
-          locations:
-            key:
-              atmosphere: ""
-              connected_to:
-              - connected_to
-              - connected_to
-              name: name
-              description: description
-              region: ""
-          start_node_id: start_node_id
-          generation_contract:
-            key: ""
-          title: title
-          unbounded: false
-      properties:
-        items:
-          items:
-            $ref: "#/components/schemas/AuthoringStorySummaryResponse"
-          title: Items
-          type: array
-        next_cursor:
-          nullable: true
-          type: string
-        has_more:
-          title: Has More
-          type: boolean
-      required:
-      - has_more
-      - items
-      - next_cursor
-      title: "PaginatedResponse[AuthoringStorySummaryResponse]"
-    PaginatedResponse_ExplorationNodeResponse_:
-      example:
-        next_cursor: next_cursor
-        has_more: true
-        items:
-        - question: question
-          answer: answer
-          picked: true
-          detail_delta:
-            key: ""
-          id: id
-          parent_node_id: parent_node_id
-          formalized_text: formalized_text
-          essential: true
-        - question: question
-          answer: answer
-          picked: true
-          detail_delta:
-            key: ""
-          id: id
-          parent_node_id: parent_node_id
-          formalized_text: formalized_text
-          essential: true
-      properties:
-        items:
-          items:
-            $ref: "#/components/schemas/ExplorationNodeResponse"
-          title: Items
-          type: array
-        next_cursor:
-          nullable: true
-          type: string
-        has_more:
-          title: Has More
-          type: boolean
-      required:
-      - has_more
-      - items
-      - next_cursor
-      title: "PaginatedResponse[ExplorationNodeResponse]"
-    PaginatedResponse_StorySummaryResponse_:
-      example:
-        next_cursor: next_cursor
-        has_more: true
-        items:
-        - content_warnings:
-          - content_warnings
-          - content_warnings
-          story_id: story_id
-          genre: genre
-          max_nodes: 0
-          start_node_id: start_node_id
-          title: title
-          unbounded: false
-        - content_warnings:
-          - content_warnings
-          - content_warnings
-          story_id: story_id
-          genre: genre
-          max_nodes: 0
-          start_node_id: start_node_id
-          title: title
-          unbounded: false
-      properties:
-        items:
-          items:
-            $ref: "#/components/schemas/StorySummaryResponse"
-          title: Items
-          type: array
-        next_cursor:
-          nullable: true
-          type: string
-        has_more:
-          title: Has More
-          type: boolean
-      required:
-      - has_more
-      - items
-      - next_cursor
-      title: "PaginatedResponse[StorySummaryResponse]"
-    PatchExplorationNodeRequest:
-      description: |-
-        Request body for PATCH /exploration-nodes/{node_id}.
-
-        Only the ``essential`` flag can be updated via the authoring surface.
-        Setting ``essential=True`` instructs the context builder to always include
-        this node's ``formalized_text`` in the synthesized narrative entry regardless
-        of byte budget.  All other fields are immutable after creation.
-      example:
-        essential: true
-      properties:
-        essential:
-          nullable: true
-          type: boolean
-      title: PatchExplorationNodeRequest
-    PathsResponse:
-      description: |-
-        All start-to-end paths through the story DAG.
-
-        Each path is an ordered list of ``node_id`` strings from ``start_node_id``
-        to an END node.  Used by ``GET /story/{id}/paths``.
-      example:
-        paths:
-        - - paths
-          - paths
-        - - paths
-          - paths
-        story_id: story_id
-      properties:
-        story_id:
-          title: Story Id
-          type: string
-        paths:
-          items:
-            items:
-              type: string
-            type: array
-          title: Paths
-          type: array
-      required:
-      - paths
-      - story_id
-      title: PathsResponse
-    PlayerDataExportResponse:
-      description: |-
-        Portable player data export for the authenticated tenant/player.
-
-        The payload is a JSON object with stable top-level groups rather than a
-        single flattened event log. That keeps future player-owned domains additive
-        without changing how clients find exploration rows.
-      example:
-        tenant_id: tenant_id
-        entity_provenance:
-        - tenant_id: tenant_id
-          playthrough_id: playthrough_id
-          last_updated_at_node_id: last_updated_at_node_id
-          introduced_at_node_id: introduced_at_node_id
-          story_id: story_id
-          introduced_at_choice_id: introduced_at_choice_id
-          session_id: session_id
-          entity_id: entity_id
-          entity_type: entity_type
-          last_updated_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          last_updated_at_choice_id: last_updated_at_choice_id
-          introduced_at: 2000-01-23T04:56:07.000+00:00
-        - tenant_id: tenant_id
-          playthrough_id: playthrough_id
-          last_updated_at_node_id: last_updated_at_node_id
-          introduced_at_node_id: introduced_at_node_id
-          story_id: story_id
-          introduced_at_choice_id: introduced_at_choice_id
-          session_id: session_id
-          entity_id: entity_id
-          entity_type: entity_type
-          last_updated_at: 2000-01-23T04:56:07.000+00:00
-          id: id
-          last_updated_at_choice_id: last_updated_at_choice_id
-          introduced_at: 2000-01-23T04:56:07.000+00:00
-        sessions:
-        - key: ""
-        - key: ""
-        player_id: player_id
-        exploration:
-          node_exploration_turns:
-          - key: ""
-          - key: ""
-        generated_at: generated_at
-      properties:
-        tenant_id:
-          title: Tenant Id
-          type: string
-        player_id:
-          title: Player Id
-          type: string
-        generated_at:
-          title: Generated At
-          type: string
-        sessions:
-          default: []
-          items:
-            additionalProperties: true
-            nullable: true
-            type: object
-          title: Sessions
-          type: array
-        exploration:
-          $ref: "#/components/schemas/PlayerExplorationDataExport"
-        entity_provenance:
-          default: []
-          items:
-            $ref: "#/components/schemas/EntityProvenanceExportEntryResponse"
-          title: Entity Provenance
-          type: array
-      required:
-      - exploration
-      - generated_at
-      - player_id
-      - tenant_id
-      title: PlayerDataExportResponse
-    PlayerErasureResponse:
-      description: |-
-        Counts returned after player-owned data erasure completes.
-
-        Counts are useful for audit and support workflows while avoiding any
-        post-erasure echo of raw content.
-      example:
-        tenant_id: tenant_id
-        player_id: player_id
-        deleted:
-          key: 0
-      properties:
-        tenant_id:
-          title: Tenant Id
-          type: string
-        player_id:
-          title: Player Id
-          type: string
-        deleted:
-          additionalProperties:
-            type: integer
-          title: Deleted
-      required:
-      - deleted
-      - player_id
-      - tenant_id
-      title: PlayerErasureResponse
-    PlayerExplorationDataExport:
-      description: |-
-        Exploration-specific player-owned rows included in a data export.
-
-        Unlike ``ExplorationStateResponse``, this portability schema intentionally
-        includes raw turn rows because questions, answers, detail deltas, and
-        response snapshots are player-owned content. Normal reload/state reads stay
-        redacted; export is the explicit privacy-reviewed readback path.
-
-        Node enrichment is now shared/canonical and is not player-attributed, so
-        only exploration turns (the player-owned transcript) are exported here.
-      example:
-        node_exploration_turns:
-        - key: ""
-        - key: ""
-      properties:
-        node_exploration_turns:
-          default: []
-          items:
-            additionalProperties: true
-            nullable: true
-            type: object
-          title: Node Exploration Turns
-          type: array
-      title: PlayerExplorationDataExport
-    RotateAnthropicKeyRequest:
-      description: |-
-        Request body for PUT /admin/tenants/{id}/anthropic-key.
-
-        Replaces the encrypted Anthropic API key stored for a tenant without
-        changing any other tenant attributes.
-      example:
-        anthropic_api_key: anthropic_api_key
-      properties:
-        anthropic_api_key:
-          minLength: 1
-          title: Anthropic Api Key
-          type: string
-      required:
-      - anthropic_api_key
-      title: RotateAnthropicKeyRequest
-    SessionResponse:
-      description: |-
-        Player session state returned by session-creation and choice-submission endpoints.
-
-        ``playthrough_id`` identifies the current run within a stable ``session_id``.
-        It changes after reset and gives clients a cheap way to discard stale local
-        caches or in-flight request bookkeeping from the previous run.
-
-        ``lock_token`` is a UUID issued when a free-text request starts processing.
-        The client must include it in concurrent requests to avoid races; it is
-        ``None`` when no lock is currently held.
-
-        ``is_completed`` becomes ``True`` when the player reaches an END node and
-        the story does not allow free-text continuation.
-      example:
-        world_flags:
-          key: ""
-        playthrough_id: playthrough_id
-        discovered_objects:
-          key:
-            object_type: ""
-            holder_id: ""
-            name: name
-            description: description
-            location_id: ""
-        discovered_flag_schema:
-          key: ""
-        discovered_locations:
-          key:
-            atmosphere: ""
-            connected_to:
-            - connected_to
-            - connected_to
-            name: name
-            description: description
-            region: ""
-        session_id: session_id
-        warnings_acknowledged_at: warnings_acknowledged_at
-        current_node_id: current_node_id
-        is_completed: true
-        nodes_visited: 0
-        lock_token: lock_token
-      properties:
-        session_id:
-          title: Session Id
-          type: string
-        playthrough_id:
-          title: Playthrough Id
-          type: string
-        current_node_id:
-          title: Current Node Id
-          type: string
-        world_flags:
-          additionalProperties: true
-          title: World Flags
-          type: object
-        discovered_locations:
-          additionalProperties:
-            $ref: "#/components/schemas/LocationSpecResponse"
-          default: {}
-          title: Discovered Locations
-        discovered_objects:
-          additionalProperties:
-            $ref: "#/components/schemas/ObjectSpecResponse"
-          default: {}
-          title: Discovered Objects
-        discovered_flag_schema:
-          additionalProperties: true
-          default: {}
-          title: Discovered Flag Schema
-          type: object
-        nodes_visited:
-          title: Nodes Visited
+        overlay_version:
           type: integer
-        is_completed:
-          title: Is Completed
-          type: boolean
-        lock_token:
-          nullable: true
+        redirect_reason:
           type: string
-        warnings_acknowledged_at:
-          nullable: true
-          type: string
-      required:
-      - current_node_id
-      - is_completed
-      - nodes_visited
-      - playthrough_id
-      - session_id
-      - world_flags
-      title: SessionResponse
-    StoryDetailResponse:
-      description: |-
-        Detailed story response for admin and authoring endpoints.
-
-        Includes the declarative state persistence fields: character registry,
-        location registry, object registry, flag definitions, initial state, and
-        the original generation contract.
-        ``generation_contract`` is ``None`` for stories created before migration 017.
-      example:
-        story_id: story_id
-        flag_schema:
-          key: ""
-        objects:
-          key:
-            object_type: ""
-            holder_id: ""
-            name: name
-            description: description
-            location_id: ""
-        max_nodes: 0
-        start_node_id: start_node_id
-        generation_contract:
-          key: ""
-        title: title
-        characters:
-          key:
-            backstory: ""
-            voice: ""
-            role: role
-            traits:
-            - traits
-            - traits
-            motive: motive
-            name: name
-        content_warnings:
-        - content_warnings
-        - content_warnings
-        initial_world_flags:
-          key: ""
-        genre: genre
-        locations:
-          key:
-            atmosphere: ""
-            connected_to:
-            - connected_to
-            - connected_to
-            name: name
-            description: description
-            region: ""
-        unbounded: false
-      properties:
-        story_id:
-          title: Story Id
-          type: string
-        title:
-          title: Title
-          type: string
-        start_node_id:
-          title: Start Node Id
-          type: string
-        genre:
-          nullable: true
-          type: string
-        content_warnings:
-          items:
-            type: string
-          nullable: true
-          type: array
-        max_nodes:
-          default: 10
-          title: Max Nodes
-          type: integer
-        unbounded:
-          default: false
-          title: Unbounded
-          type: boolean
-        flag_schema:
-          additionalProperties: true
-          default: {}
-          title: Flag Schema
-          type: object
-        initial_world_flags:
-          additionalProperties: true
-          default: {}
-          title: Initial World Flags
-          type: object
-        characters:
-          additionalProperties:
-            $ref: "#/components/schemas/CharacterSpecResponse"
-          default: {}
-          title: Characters
-        locations:
-          additionalProperties:
-            $ref: "#/components/schemas/LocationSpecResponse"
-          default: {}
-          title: Locations
-        objects:
-          additionalProperties:
-            $ref: "#/components/schemas/ObjectSpecResponse"
-          default: {}
-          title: Objects
-        generation_contract:
-          additionalProperties: true
-          nullable: true
-          type: object
-      required:
-      - start_node_id
-      - story_id
-      - title
-      title: StoryDetailResponse
-    StoryGenerateRequest:
-      description: |-
-        Request body for POST /v1/authoring/stories.
-
-        Mirrors ``GenerationContract`` fields exposed to tenants; ``tenant_id``
-        and ``story_id`` are assigned server-side and must not appear here.
-
-        ``mode`` selects the execution model:
-        - ``"sync"`` (default): generation runs in-process; ``story_id`` is
-          returned in the 201 response body when generation succeeds.
-        - ``"async"``: the job is enqueued via ARQ; the response carries only
-          ``job_id`` (HTTP 202). The caller polls
-          ``GET /v1/authoring/jobs/{job_id}`` or streams
-          ``GET /v1/authoring/jobs/{job_id}/stream`` for completion.
-
-        ``outcome_anchors`` is an optional list of 2–4 short strings describing
-        valid ending shapes that the LLM should steer the narrative toward.
-      example:
-        complexity: 3
-        world_system_prompt: world_system_prompt
-        age_rating: age_rating
-        target_node_count: 5
-        flag_schema:
-          key: ""
-        objects:
-          key: ""
-        allow_free_text_continuation: true
-        allow_llm_characters: true
-        mode: sync
-        themes:
-        - themes
-        - themes
-        characters:
-          key: ""
-        history_context_window: 12
-        initial_world_flags:
-          key: ""
-        outcome_anchors:
-        - outcome_anchors
-        - outcome_anchors
-        genre: genre
-        allow_llm_objects: true
-        locations:
-          key: ""
-        allow_llm_locations: true
-        unbounded: false
-        history_summary_max_chars: 115
-        prompt: prompt
-      properties:
-        prompt:
-          minLength: 1
-          title: Prompt
-          type: string
-        mode:
-          default: sync
-          pattern: ^(sync|async)$
-          title: Mode
-          type: string
-        genre:
-          nullable: true
-          type: string
-        themes:
-          items:
-            type: string
-          nullable: true
-          type: array
-        target_node_count:
-          maximum: 30.0
-          minimum: 3.0
-          nullable: true
-          type: integer
-        age_rating:
-          nullable: true
-          type: string
-        complexity:
-          maximum: 5.0
-          minimum: 1.0
-          nullable: true
-          type: integer
-        initial_world_flags:
-          additionalProperties: true
-          nullable: true
-          type: object
-        flag_schema:
-          additionalProperties: true
-          nullable: true
-          type: object
-        characters:
-          additionalProperties: true
-          nullable: true
-          type: object
-        locations:
-          additionalProperties: true
-          nullable: true
-          type: object
-        objects:
-          additionalProperties: true
-          nullable: true
-          type: object
-        allow_free_text_continuation:
-          default: true
-          title: Allow Free Text Continuation
-          type: boolean
-        unbounded:
-          default: false
-          title: Unbounded
-          type: boolean
-        allow_llm_characters:
-          default: true
-          title: Allow Llm Characters
-          type: boolean
-        allow_llm_locations:
-          default: true
-          title: Allow Llm Locations
-          type: boolean
-        allow_llm_objects:
-          default: true
-          title: Allow Llm Objects
-          type: boolean
-        outcome_anchors:
-          items:
-            type: string
-          nullable: true
-          type: array
-        history_summary_max_chars:
-          maximum: 500.0
-          minimum: 50.0
-          nullable: true
-          type: integer
-        history_context_window:
-          maximum: 20.0
-          minimum: 1.0
-          nullable: true
-          type: integer
-        world_system_prompt:
-          nullable: true
-          type: string
-      required:
-      - prompt
-      title: StoryGenerateRequest
-    StoryGenerateResponse:
-      description: |-
-        Response for POST /v1/authoring/stories.
-
-        HTTP 201 is returned on ``mode="sync"`` success; HTTP 202 for
-        ``mode="async"`` (job enqueued).
-
-        On the sync path ``story_id`` is populated immediately and
-        ``status="complete"``.  On the async path ``story_id`` is ``None`` and
-        ``status="queued"``.
-      example:
-        mode: mode
-        job_id: job_id
-        story_id: story_id
-        status: status
-      properties:
-        job_id:
-          title: Job Id
-          type: string
-        mode:
-          title: Mode
-          type: string
-        story_id:
-          nullable: true
-          type: string
-        status:
-          title: Status
-          type: string
-      required:
-      - job_id
-      - mode
-      - status
-      - story_id
-      title: StoryGenerateResponse
-    StorySummaryResponse:
-      description: |-
-        Lightweight story summary for the list-stories endpoint.
-
-        ``unbounded`` indicates that the depth cap is disabled for this story —
-        the player can continue indefinitely past ``max_nodes`` via free-text.
-      example:
-        content_warnings:
-        - content_warnings
-        - content_warnings
-        story_id: story_id
-        genre: genre
-        max_nodes: 0
-        start_node_id: start_node_id
-        title: title
-        unbounded: false
-      properties:
-        story_id:
-          title: Story Id
-          type: string
-        title:
-          title: Title
-          type: string
-        start_node_id:
-          title: Start Node Id
-          type: string
-        genre:
-          nullable: true
-          type: string
-        content_warnings:
-          items:
-            type: string
-          nullable: true
-          type: array
-        max_nodes:
-          default: 10
-          title: Max Nodes
-          type: integer
-        unbounded:
-          default: false
-          title: Unbounded
+        requires_action:
           type: boolean
       required:
-      - start_node_id
-      - story_id
-      - title
-      title: StorySummaryResponse
-    TenantRegistrationRequest:
-      description: |-
-        Request body for POST /admin/tenants (create a new API tenant).
-
-        ``anthropic_api_key`` is encrypted at rest using the platform Fernet key
-        and stored in ``TenantORM.anthropic_api_key_enc`` — the raw value is never
-        persisted.  ``billing_country`` must be a 2-letter ISO 3166-1 alpha-2 code.
-      example:
-        anthropic_api_key: anthropic_api_key
-        name: name
-        billing_country: billing_country
-        max_age_rating: teen
-        contact_email: contact_email
-      properties:
-        name:
-          minLength: 1
-          title: Name
-          type: string
-        contact_email:
-          title: Contact Email
-          type: string
-        anthropic_api_key:
-          minLength: 1
-          title: Anthropic Api Key
-          type: string
-        billing_country:
-          maxLength: 2
-          minLength: 2
-          title: Billing Country
-          type: string
-        max_age_rating:
-          default: teen
-          title: Max Age Rating
-          type: string
-      required:
-      - anthropic_api_key
-      - billing_country
-      - contact_email
-      - name
-      title: TenantRegistrationRequest
-    TenantRegistrationResponse:
-      description: |-
-        Response body for POST /admin/tenants.
-
-        ``api_key`` is the full unmasked key shown exactly once at registration
-        time — it is not stored and cannot be retrieved later.  Subsequent
-        API calls authenticate using the key's SHA-256 hash prefix.
-      example:
-        tenant_id: tenant_id
-        api_key: api_key
-        status: status
-      properties:
-        tenant_id:
-          title: Tenant Id
-          type: string
-        api_key:
-          title: Api Key
-          type: string
-        status:
-          title: Status
-          type: string
-      required:
-      - api_key
-      - status
-      - tenant_id
-      title: TenantRegistrationResponse
-    TenantResponse:
-      description: "Read-only tenant summary returned by GET /admin/tenants/{id}."
+      - answer
+      - cache_hit
+      - confidence
+      - detail_delta
+      - hidden_info_requested
+      - idempotency_replay
+      - requires_action
+    _v1_admin_tenant__tenant_id__get_200_response:
       example:
         tenant_id: tenant_id
         tier: tier
-        name: name
         billing_country: billing_country
-        max_age_rating: max_age_rating
+        name: name
         created_at: created_at
+        max_age_rating: max_age_rating
         contact_email: contact_email
         status: status
       properties:
-        tenant_id:
-          title: Tenant Id
-          type: string
-        name:
-          title: Name
+        billing_country:
           type: string
         contact_email:
-          title: Contact Email
-          type: string
-        billing_country:
-          title: Billing Country
-          type: string
-        max_age_rating:
-          title: Max Age Rating
-          type: string
-        tier:
-          title: Tier
-          type: string
-        status:
-          title: Status
           type: string
         created_at:
-          title: Created At
+          type: string
+        max_age_rating:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        tenant_id:
+          type: string
+        tier:
           type: string
       required:
       - billing_country
@@ -3850,30 +1731,455 @@ components:
       - status
       - tenant_id
       - tier
-      title: TenantResponse
-    ToSStatusResponse:
-      description: |-
-        Player's ToS acceptance status for the current version.
-
-        ``accepted`` is ``True`` when the player has accepted the current ToS
-        version.  ``version`` is the version_number of the current (latest
-        effective) ToS; it is ``None`` when no ToS has been published yet.
+    _v1_admin_story_scaffold_post_201_response:
       example:
-        accepted: true
-        version: version
+        mode: mode
+        job_id: job_id
+        story_id: story_id
+        status: status
       properties:
-        accepted:
-          title: Accepted
-          type: boolean
-        version:
-          nullable: true
+        job_id:
+          type: string
+        mode:
+          type: string
+        status:
+          type: string
+        story_id:
           type: string
       required:
-      - accepted
+      - status
+    _v1_admin_story__story_id__get_200_response_objects_value:
+      example:
+        object_type: object_type
+        holder_id: holder_id
+        name: name
+        description: description
+        location_id: location_id
+      properties:
+        description:
+          type: string
+        holder_id:
+          type: string
+        location_id:
+          type: string
+        name:
+          type: string
+        object_type:
+          type: string
+      required:
+      - description
+      - holder_id
+      - location_id
+      - name
+      - object_type
+    _v1_story__story_id__exploration_nodes__node_id__pick_post_200_response:
+      example:
+        picked: true
+        exploration_node_id: exploration_node_id
+      properties:
+        exploration_node_id:
+          type: string
+        picked:
+          type: boolean
+      required:
+      - exploration_node_id
+      - picked
+    _v1_story__story_id__choice_post_200_response:
+      example:
+        metadata:
+          complexity: 0
+          themes:
+          - themes
+          - themes
+          mood: mood
+          age_rating: age_rating
+          genre: genre
+          drama_score: 6.027456183070403
+        end_reason: end_reason
+        flag_delta:
+          key:
+            key: ""
+        object_delta:
+          key:
+            object_type: object_type
+            holder_id: holder_id
+            name: name
+            description: description
+            location_id: location_id
+        resolved_anchor: resolved_anchor
+        character_delta:
+        - character_delta
+        - character_delta
+        node_type: node_type
+        flag_schema_delta:
+          key:
+            key: ""
+        history_summary: history_summary
+        text: text
+        choices:
+        - flag_delta:
+            key:
+              key: ""
+          flag_schema_delta:
+            key:
+              key: ""
+          id: id
+          label: label
+          target_node_id: target_node_id
+        - flag_delta:
+            key:
+              key: ""
+          flag_schema_delta:
+            key:
+              key: ""
+          id: id
+          label: label
+          target_node_id: target_node_id
+        location_delta:
+          key:
+            atmosphere: atmosphere
+            connected_to:
+            - connected_to
+            - connected_to
+            name: name
+            description: description
+            region: region
+        node_id: node_id
+      properties:
+        character_delta:
+          items:
+            type: string
+          type: array
+        choices:
+          items:
+            $ref: "#/components/schemas/_v1_story__story_id__choice_post_200_response_choices_inner"
+          type: array
+        end_reason:
+          type: string
+        flag_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        flag_schema_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        history_summary:
+          type: string
+        location_delta:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_locations_value"
+        metadata:
+          $ref: "#/components/schemas/_v1_story__story_id__choice_post_200_response_metadata"
+        node_id:
+          type: string
+        node_type:
+          type: string
+        object_delta:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_objects_value"
+        resolved_anchor:
+          type: string
+        text:
+          type: string
+      required:
+      - character_delta
+      - choices
+      - flag_delta
+      - flag_schema_delta
+      - location_delta
+      - metadata
+      - node_id
+      - node_type
+      - object_delta
+      - text
+    _v1_health_get_200_response:
+      example:
+        version: version
+        postgres: postgres
+        redis: redis
+        status: status
+      properties:
+        postgres:
+          type: string
+        redis:
+          type: string
+        status:
+          type: string
+        version:
+          type: string
+      required:
+      - postgres
+      - redis
+      - status
       - version
-      title: ToSStatusResponse
-    ToSVersionResponse:
-      description: A published Terms of Service version returned by GET /tos/current.
+    _v1_admin_story__story_id__get_200_response_locations_value:
+      example:
+        atmosphere: atmosphere
+        connected_to:
+        - connected_to
+        - connected_to
+        name: name
+        description: description
+        region: region
+      properties:
+        atmosphere:
+          type: string
+        connected_to:
+          items:
+            type: string
+          type: array
+        description:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+      required:
+      - atmosphere
+      - connected_to
+      - description
+      - name
+      - region
+    _v1_admin_tenant_register_post_201_response:
+      example:
+        tenant_id: tenant_id
+        api_key: api_key
+        status: status
+      properties:
+        api_key:
+          type: string
+        status:
+          type: string
+        tenant_id:
+          type: string
+      required:
+      - api_key
+      - status
+      - tenant_id
+    _v1_terms_accept_post_request:
+      properties:
+        tos_version_id:
+          type: string
+      required:
+      - tos_version_id
+    _v1_admin_story__story_id__get_200_response:
+      example:
+        allow_free_text_continuation: true
+        flag_schema:
+          key:
+            key: ""
+        objects:
+          key:
+            object_type: object_type
+            holder_id: holder_id
+            name: name
+            description: description
+            location_id: location_id
+        story_id: story_id
+        max_nodes: 0
+        generation_contract:
+          key:
+            key: ""
+        start_node_id: start_node_id
+        title: title
+        characters:
+          key:
+            backstory: backstory
+            voice: voice
+            role: role
+            traits:
+            - traits
+            - traits
+            motive: motive
+            name: name
+        content_warnings:
+        - content_warnings
+        - content_warnings
+        initial_world_flags:
+          key:
+            key: ""
+        genre: genre
+        locations:
+          key:
+            atmosphere: atmosphere
+            connected_to:
+            - connected_to
+            - connected_to
+            name: name
+            description: description
+            region: region
+        unbounded: true
+      properties:
+        allow_free_text_continuation:
+          type: boolean
+        characters:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_characters_value"
+        content_warnings:
+          items:
+            type: string
+          type: array
+        flag_schema:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        generation_contract:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        genre:
+          type: string
+        initial_world_flags:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        locations:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_locations_value"
+        max_nodes:
+          type: integer
+        objects:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_objects_value"
+        start_node_id:
+          type: string
+        story_id:
+          type: string
+        title:
+          type: string
+        unbounded:
+          type: boolean
+      required:
+      - allow_free_text_continuation
+      - characters
+      - flag_schema
+      - initial_world_flags
+      - locations
+      - max_nodes
+      - objects
+      - start_node_id
+      - story_id
+      - title
+      - unbounded
+    _v1_authoring_stories__story_id__graph_get_200_response:
+      example:
+        nodes:
+          key:
+            node_type: node_type
+            text: text
+            choices:
+            - id: id
+              label: label
+              target_node_id: target_node_id
+            - id: id
+              label: label
+              target_node_id: target_node_id
+            node_id: node_id
+        story_id: story_id
+        exploration_nodes:
+        - answer: answer
+          question: question
+          picked: true
+          detail_delta:
+            key:
+              key: ""
+          normalized_question: normalized_question
+          id: id
+          essential: true
+          formalized_text: formalized_text
+          parent_node_id: parent_node_id
+        - answer: answer
+          question: question
+          picked: true
+          detail_delta:
+            key:
+              key: ""
+          normalized_question: normalized_question
+          id: id
+          essential: true
+          formalized_text: formalized_text
+          parent_node_id: parent_node_id
+        start_node_id: start_node_id
+        title: title
+      properties:
+        exploration_nodes:
+          items:
+            $ref: "#/components/schemas/_v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner"
+          type: array
+        nodes:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_authoring_stories__story_id__graph_get_200_response_nodes_value"
+        start_node_id:
+          type: string
+        story_id:
+          type: string
+        title:
+          type: string
+      required:
+      - exploration_nodes
+      - nodes
+      - start_node_id
+      - story_id
+      - title
+    _v1_story__story_id__choice_post_request:
+      properties:
+        choice_id:
+          type: string
+        idempotency_key:
+          type: string
+        lock_token:
+          type: string
+        node_id:
+          type: string
+      required:
+      - choice_id
+      - node_id
+    _v1_authoring_stories__story_id__exploration_nodes_get_200_response_items_inner:
+      example:
+        answer: answer
+        question: question
+        picked: true
+        detail_delta:
+          key:
+            key: ""
+        normalized_question: normalized_question
+        id: id
+        essential: true
+        formalized_text: formalized_text
+        parent_node_id: parent_node_id
+      properties:
+        answer:
+          type: string
+        detail_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        essential:
+          type: boolean
+        formalized_text:
+          type: string
+        id:
+          type: string
+        normalized_question:
+          type: string
+        parent_node_id:
+          type: string
+        picked:
+          type: boolean
+        question:
+          type: string
+      required:
+      - answer
+      - detail_delta
+      - essential
+      - formalized_text
+      - id
+      - normalized_question
+      - parent_node_id
+      - picked
+      - question
+    _v1_admin_terms_get_200_response_inner:
       example:
         effective_date: effective_date
         created_at: created_at
@@ -3881,20 +2187,15 @@ components:
         id: id
         content: content
       properties:
-        id:
-          title: Id
-          type: string
-        version_number:
-          title: Version Number
-          type: string
-        effective_date:
-          title: Effective Date
+        content:
           type: string
         created_at:
-          title: Created At
           type: string
-        content:
-          title: Content
+        effective_date:
+          type: string
+        id:
+          type: string
+        version_number:
           type: string
       required:
       - content
@@ -3902,55 +2203,436 @@ components:
       - effective_date
       - id
       - version_number
-      title: ToSVersionResponse
-    ValidationError:
+    _v1_admin_story__story_id__node__node_id__clear_enrichment_post_200_response:
       example:
-        msg: msg
-        loc:
-        - Location_inner
-        - Location_inner
-        input: ""
-        ctx: "{}"
-        type: type
+        enrichment_summary: enrichment_summary
+        node_id: node_id
       properties:
-        loc:
-          items:
-            $ref: "#/components/schemas/Location_inner"
-          title: Location
-          type: array
-        msg:
-          title: Message
+        enrichment_summary:
           type: string
-        type:
-          title: Error Type
+        node_id:
           type: string
-        input:
-          title: Input
-        ctx:
-          title: Context
-          type: object
       required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
-    Location_inner:
-      anyOf:
-      - type: string
-      - type: integer
+      - enrichment_summary
+      - node_id
+    _v1_story__story_id__session_get_200_response:
+      example:
+        world_flags:
+          key:
+            key: ""
+        playthrough_id: playthrough_id
+        discovered_flag_schema:
+          key:
+            key: ""
+        discovered_objects:
+          key:
+            object_type: object_type
+            holder_id: holder_id
+            name: name
+            description: description
+            location_id: location_id
+        discovered_locations:
+          key:
+            atmosphere: atmosphere
+            connected_to:
+            - connected_to
+            - connected_to
+            name: name
+            description: description
+            region: region
+        session_id: session_id
+        warnings_acknowledged_at: warnings_acknowledged_at
+        current_node_id: current_node_id
+        discovered_characters:
+          key:
+            backstory: backstory
+            voice: voice
+            role: role
+            traits:
+            - traits
+            - traits
+            motive: motive
+            name: name
+        is_completed: true
+        nodes_visited: 0
+        lock_token: lock_token
+      properties:
+        current_node_id:
+          type: string
+        discovered_characters:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_characters_value"
+        discovered_flag_schema:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        discovered_locations:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_locations_value"
+        discovered_objects:
+          additionalProperties:
+            $ref: "#/components/schemas/_v1_admin_story__story_id__get_200_response_objects_value"
+        is_completed:
+          type: boolean
+        lock_token:
+          type: string
+        nodes_visited:
+          type: integer
+        playthrough_id:
+          type: string
+        session_id:
+          type: string
+        warnings_acknowledged_at:
+          type: string
+        world_flags:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+      required:
+      - current_node_id
+      - discovered_characters
+      - discovered_flag_schema
+      - discovered_locations
+      - discovered_objects
+      - is_completed
+      - nodes_visited
+      - playthrough_id
+      - session_id
+      - world_flags
+    _v1_story__story_id__exploration_state_get_200_response:
+      example:
+        playthrough_id: playthrough_id
+        recent_turns:
+        - answer: answer
+          question: question
+          created_at: created_at
+          normalized_question: normalized_question
+          id: id
+          node_id: node_id
+        - answer: answer
+          question: question
+          created_at: created_at
+          normalized_question: normalized_question
+          id: id
+          node_id: node_id
+        current_node_id: current_node_id
+        node_id: node_id
+      properties:
+        current_node_id:
+          type: string
+        node_id:
+          type: string
+        playthrough_id:
+          type: string
+        recent_turns:
+          items:
+            $ref: "#/components/schemas/_v1_story__story_id__exploration_state_get_200_response_recent_turns_inner"
+          type: array
+      required:
+      - current_node_id
+      - node_id
+      - playthrough_id
+      - recent_turns
+    _v1_authoring_stories__story_id__graph_get_200_response_nodes_value:
+      example:
+        node_type: node_type
+        text: text
+        choices:
+        - id: id
+          label: label
+          target_node_id: target_node_id
+        - id: id
+          label: label
+          target_node_id: target_node_id
+        node_id: node_id
+      properties:
+        choices:
+          items:
+            $ref: "#/components/schemas/_v1_authoring_stories__story_id__graph_get_200_response_nodes_value_choices_inner"
+          type: array
+        node_id:
+          type: string
+        node_type:
+          type: string
+        text:
+          type: string
+      required:
+      - choices
+      - node_id
+      - node_type
+    _v1_story__story_id__session_entity_index_get_200_response_entries_inner:
+      example:
+        last_updated_at_node_id: last_updated_at_node_id
+        entity_type: entity_type
+        introduced_at_node_id: introduced_at_node_id
+        introduced_at_choice_id: introduced_at_choice_id
+        entity_id: entity_id
+        last_updated_at_choice_id: last_updated_at_choice_id
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        introduced_at_choice_id:
+          type: string
+        introduced_at_node_id:
+          type: string
+        last_updated_at_choice_id:
+          type: string
+        last_updated_at_node_id:
+          type: string
+      required:
+      - entity_id
+      - entity_type
+      - introduced_at_node_id
+      - last_updated_at_node_id
+    _v1_story__story_id__session_entity_index_get_200_response:
+      example:
+        playthrough_id: playthrough_id
+        entries:
+        - last_updated_at_node_id: last_updated_at_node_id
+          entity_type: entity_type
+          introduced_at_node_id: introduced_at_node_id
+          introduced_at_choice_id: introduced_at_choice_id
+          entity_id: entity_id
+          last_updated_at_choice_id: last_updated_at_choice_id
+        - last_updated_at_node_id: last_updated_at_node_id
+          entity_type: entity_type
+          introduced_at_node_id: introduced_at_node_id
+          introduced_at_choice_id: introduced_at_choice_id
+          entity_id: entity_id
+          last_updated_at_choice_id: last_updated_at_choice_id
+        session_id: session_id
+      properties:
+        entries:
+          items:
+            $ref: "#/components/schemas/_v1_story__story_id__session_entity_index_get_200_response_entries_inner"
+          type: array
+        playthrough_id:
+          type: string
+        session_id:
+          type: string
+      required:
+      - entries
+      - playthrough_id
+      - session_id
+    _v1_authoring_stories_get_200_response:
+      example:
+        next_cursor: next_cursor
+        has_more: true
+        items:
+        - content_warnings:
+          - content_warnings
+          - content_warnings
+          story_id: story_id
+          genre: genre
+          max_nodes: 0
+          start_node_id: start_node_id
+          title: title
+          unbounded: true
+        - content_warnings:
+          - content_warnings
+          - content_warnings
+          story_id: story_id
+          genre: genre
+          max_nodes: 0
+          start_node_id: start_node_id
+          title: title
+          unbounded: true
+      properties:
+        has_more:
+          type: boolean
+        items:
+          items:
+            $ref: "#/components/schemas/_v1_authoring_stories_get_200_response_items_inner"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - has_more
+      - items
+    _v1_admin_story_import_post_201_response:
+      example:
+        story_id: story_id
+        title: title
+      properties:
+        story_id:
+          type: string
+        title:
+          type: string
+      required:
+      - story_id
+      - title
+    _v1_admin_story_import_post_default_response:
+      example:
+        details:
+          key:
+            key: ""
+        error_code: error_code
+        message: message
+      properties:
+        details:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        error_code:
+          type: string
+        message:
+          type: string
+      required:
+      - error_code
+      - message
+    _v1_admin_tenant_register_post_request:
+      properties:
+        billing_country:
+          type: string
+        contact_email:
+          type: string
+        max_age_rating:
+          type: string
+        name:
+          type: string
+      required:
+      - billing_country
+      - contact_email
+      - max_age_rating
+      - name
+    _v1_admin_tenant__tenant_id__llm_key_get_200_response:
+      example:
+        tenant_id: tenant_id
+        models:
+        - models
+        - models
+        policy_drift: true
+        updated_at: updated_at
+        budget_remaining: 0.8008281904610115
+        not_provisioned: true
+        revocation_pending: true
+        spend: 1.4658129805029452
+        key_alias: key_alias
+        max_budget: 6.027456183070403
+        key_status: key_status
+      properties:
+        budget_remaining:
+          type: number
+        key_alias:
+          type: string
+        key_status:
+          type: string
+        max_budget:
+          type: number
+        models:
+          items:
+            type: string
+          type: array
+        not_provisioned:
+          type: boolean
+        policy_drift:
+          type: boolean
+        revocation_pending:
+          type: boolean
+        spend:
+          type: number
+        tenant_id:
+          type: string
+        updated_at:
+          type: string
+      required:
+      - models
+      - not_provisioned
+      - policy_drift
+      - revocation_pending
+      - tenant_id
+    _v1_admin_story__story_id__get_200_response_characters_value:
+      example:
+        backstory: backstory
+        voice: voice
+        role: role
+        traits:
+        - traits
+        - traits
+        motive: motive
+        name: name
+      properties:
+        backstory:
+          type: string
+        motive:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        traits:
+          items:
+            type: string
+          type: array
+        voice:
+          type: string
+      required:
+      - backstory
+      - motive
+      - name
+      - role
+      - traits
+      - voice
+    _v1_authoring_stories__story_id__exploration_nodes__node_id__patch_request:
+      properties:
+        essential:
+          type: boolean
+    _v1_story__story_id__choice_post_200_response_choices_inner:
+      example:
+        flag_delta:
+          key:
+            key: ""
+        flag_schema_delta:
+          key:
+            key: ""
+        id: id
+        label: label
+        target_node_id: target_node_id
+      properties:
+        flag_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        flag_schema_delta:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+        id:
+          type: string
+        label:
+          type: string
+        target_node_id:
+          type: string
+      required:
+      - flag_delta
+      - flag_schema_delta
+      - id
+      - label
+    _v1_story__story_id__free_text_post_request:
+      properties:
+        free_text:
+          type: string
+        idempotency_key:
+          type: string
+        lock_token:
+          type: string
+        node_id:
+          type: string
+      required:
+      - free_text
+      - node_id
   securitySchemes:
     AdminBearer:
-      bearerFormat: opaque
-      description: Platform admin token (PLATFORM_ADMIN_TOKEN from .env)
+      bearerFormat: platform admin token
       scheme: bearer
       type: http
     PlayerApiKey:
-      description: Tenant API key
       in: header
       name: X-API-Key
       type: apiKey
     PlayerId:
-      description: Opaque tenant-managed player identifier
       in: header
       name: X-Player-Id
       type: apiKey
